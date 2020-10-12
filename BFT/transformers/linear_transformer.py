@@ -33,10 +33,10 @@ class LinearTransformer(nn.Module):
                 value_dimensions=query_dimension,
                 feed_forward_dimensions=dim_feedforward,
                 dropout=dropout,
-                # attention_type="causal-linear",
-                # activation="gelu",
-                attention_type="causal-relative-linear",
-                activation='gelu',
+                attention_type="causal-linear",
+                activation="gelu",
+                # attention_type="causal-relative-linear",
+                # activation='gelu',
                 final_normalization=True
             ).get()
         else:

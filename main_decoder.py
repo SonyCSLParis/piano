@@ -9,6 +9,9 @@ from datetime import datetime
 import click
 import torch
 
+import torch.multiprocessing as mp
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
 from BFT.data_processors.data_processor import DataProcessor
 from BFT.getters import get_dataloader_generator, get_data_processor, get_decoder
 
@@ -19,36 +22,73 @@ from BFT.getters import get_dataloader_generator, get_data_processor, get_decode
 @click.option('-o', '--overfitted', is_flag=True)
 @click.option('-c', '--config', type=click.Path(exists=True))
 @click.option('-n', '--num_workers', type=int, default=0)
-def main(train,
-         load,
-         overfitted,
-         config,
-         num_workers
-         ):
-    # Use all gpus available
-    gpu_ids = [int(gpu) for gpu in range(torch.cuda.device_count())]
-    print(f'Using GPUs {gpu_ids}')
-    if len(gpu_ids) > 0:
-        device = 'cuda'
+def launcher(train, load, overfitted, config, num_workers):    
+    
+    # === Set shared parameters
+    
+    # always use the maximum number of available GPUs for training
+    if train:
+        world_size = torch.cuda.device_count() 
+        assert world_size > 0
     else:
-        device = 'cpu'
-
-    # Load config
+        # only use 1 GPU for inference
+        world_size = 1
+    
+    # Load config as dict
     config_path = config
     config_module_name = os.path.splitext(config)[0].replace('/', '.')
     config = importlib.import_module(config_module_name).config
-
-    # compute time stamp
+    
+    # Compute time stamp
     if config['timestamp'] is not None:
         timestamp = config['timestamp']
     else:
         timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
         config['timestamp'] = timestamp
-
+    
+    # Create or retreive model_dir
     if load:
         model_dir = os.path.dirname(config_path)
     else:
         model_dir = f'models/{config["savename"]}_{timestamp}'
+    
+    # Copy .py config file in the save directory before training
+    if not load:
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+        shutil.copy(config_path, f'{model_dir}/config.py')
+        
+    mp.spawn(main,
+            args=(train,
+                  load, 
+                  overfitted, 
+                  config,
+                  num_workers,
+                  world_size,
+                  model_dir),
+            nprocs=world_size,
+            join=True)
+
+
+def main(rank,
+         train,
+         load,
+         overfitted,
+         config,
+         num_workers,
+         world_size,         
+         model_dir
+         ):
+    # === Init process group
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'    
+    dist.init_process_group(
+            backend='nccl',
+            world_size=world_size,
+            rank=rank
+        )
+    torch.cuda.set_device(rank)
+    device = f'cuda:{rank}'
 
     # === Decoder ====
     dataloader_generator = get_dataloader_generator(
@@ -69,24 +109,25 @@ def main(train,
         decoder_type=config['decoder_type'],
         decoder_kwargs=config['decoder_kwargs'],
         training_phase=train
-        # training_phase = True
     )
 
     if load:
         if overfitted:
+            # TODO load mp
             decoder.load(early_stopped=False)
         else:
             decoder.load(early_stopped=True)
         decoder.to(device)
 
     if train:
-        # Copy .py config file in the save directory before training
-        if not load:
-            if not os.path.exists(model_dir):
-                os.makedirs(model_dir)
-            shutil.copy(config_path, f'{model_dir}/config.py')
+
         decoder.to(device)
-        decoder.train_model(
+        decoder = DistributedDataParallel(
+            module=decoder,
+            device_ids=[rank],
+            output_device=rank
+        )
+        decoder.module.train_model(
             batch_size=config['batch_size'],
             num_batches=config['num_batches'],
             num_epochs=config['num_epochs'],
@@ -146,5 +187,10 @@ def main(train,
     #     score.show()
 
 
+
+
+
 if __name__ == '__main__':
-    main()
+    launcher()
+
+

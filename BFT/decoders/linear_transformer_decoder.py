@@ -73,10 +73,10 @@ class LinearTransformerDecoder(nn.Module):
         #     num_channels=num_channels_decoder * 4
         # )
 
-        self.target_positional_embedding = ChannelEmbeddings(
-            positional_embedding_size=positional_embedding_size,
-            num_channels=num_channels_decoder
-        )
+        # self.target_positional_embedding = ChannelEmbeddings(
+        #     positional_embedding_size=positional_embedding_size,
+        #     num_channels=num_channels_decoder
+        # )
 
         # for Bach
         # self.target_positional_embedding = LearntEmbeddings(
@@ -99,12 +99,12 @@ class LinearTransformerDecoder(nn.Module):
         # )
 
         # LAST USED
-        # self.target_positional_embedding = SinusoidalPositionalEmbeddingChannels(
-        #     positional_embedding_size=positional_embedding_size,
-        #     num_channels=num_channels_decoder,
-        #     num_tokens_max=1024 * 4,  # TODO hard coded
-        #     dropout=0.1
-        # )
+        self.target_positional_embedding = SinusoidalPositionalEmbeddingChannels(
+            positional_embedding_size=positional_embedding_size,
+            num_channels=num_channels_decoder,
+            num_tokens_max=1024 * 4,  # TODO hard coded
+            dropout=0.1
+        )
 
         linear_target_input_size = self.d_model - positional_embedding_size
         self.linear_target = nn.Linear(
