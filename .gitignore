@@ -2,3 +2,5 @@
 .idea/
 models/
 *~
+.vscode/
+__pycache__/
