@@ -1,6 +1,7 @@
 """
 @author: Gaetan Hadjeres
 """
+from BFT.decoders.decoder_handler import DecoderHandler
 import importlib
 import os
 import shutil
@@ -103,8 +104,6 @@ def main(rank,
     )
 
     decoder = get_decoder(
-        model_dir=model_dir,
-        dataloader_generator=dataloader_generator,
         data_processor=data_processor,
         decoder_type=config['decoder_type'],
         decoder_kwargs=config['decoder_kwargs'],
@@ -127,7 +126,14 @@ def main(rank,
             device_ids=[rank],
             output_device=rank
         )
-        decoder.module.train_model(
+        
+        decoder_handler = DecoderHandler(
+            decoder=decoder,
+            model_dir=model_dir,
+            dataloader_generator=dataloader_generator
+        )
+        
+        decoder_handler.train_model(
             batch_size=config['batch_size'],
             num_batches=config['num_batches'],
             num_epochs=config['num_epochs'],
