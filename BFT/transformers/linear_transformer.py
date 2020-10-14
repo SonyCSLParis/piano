@@ -35,8 +35,6 @@ class LinearTransformer(nn.Module):
                 dropout=dropout,
                 attention_type="causal-linear",
                 activation="gelu",
-                # attention_type="causal-relative-linear",
-                # activation='gelu',
                 final_normalization=True
             ).get()
         else:

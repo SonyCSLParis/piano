@@ -58,7 +58,8 @@ def launcher(train, load, overfitted, config, num_workers):
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
         shutil.copy(config_path, f'{model_dir}/config.py')
-        
+    
+    print(f'Using {world_size} GPUs')
     mp.spawn(main,
             args=(train,
                   load, 
@@ -110,13 +111,8 @@ def main(rank,
         training_phase=train
     )
 
-    if load:
-        if overfitted:
-            # TODO load mp
-            decoder.load(early_stopped=False)
-        else:
-            decoder.load(early_stopped=True)
-        decoder.to(device)
+
+
 
     if train:
 
@@ -132,6 +128,12 @@ def main(rank,
             model_dir=model_dir,
             dataloader_generator=dataloader_generator
         )
+        
+        if load:
+            if overfitted:
+                decoder_handler.load(early_stopped=False)
+            else:
+                decoder_handler.load(early_stopped=True)
         
         decoder_handler.train_model(
             batch_size=config['batch_size'],

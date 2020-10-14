@@ -5,13 +5,38 @@ from matplotlib.ticker import NullFormatter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import nn
 from torch.distributions import Normal, kl_divergence
+import torch.distributed as dist
 
 
 def cuda_variable(tensor, non_blocking=False):
     if torch.cuda.is_available():
-        return tensor.to('cuda', non_blocking=non_blocking)
+        # return tensor.to('cuda', non_blocking=non_blocking)
+        return tensor.to(f'cuda:{dist.get_rank()}', non_blocking=non_blocking)
     else:
         return tensor
+
+def is_main_process():
+    return dist.get_rank() == 0
+
+def all_reduce_scalar(scalar, average=True):
+    t = torch.Tensor([scalar]).to(f'cuda:{dist.get_rank()}')
+    dist.all_reduce(t)
+    scalar = t[0].detach().item()
+    if average:
+        scalar = scalar / dist.get_world_size()
+    return scalar
+
+
+def display_monitored_quantities(epoch_id, monitored_quantities_train,
+                                 monitored_quantities_val) -> None:
+    if is_main_process():
+        print(f'======= Epoch {epoch_id} =======')
+        print(f'---Train---')
+        dict_pretty_print(monitored_quantities_train, endstr=' ' * 5)
+        print()
+        print(f'---Val---')
+        dict_pretty_print(monitored_quantities_val, endstr=' ' * 5)
+        print('\n')
 
 
 def to_numpy(tensor):
@@ -28,8 +53,7 @@ def dict_pretty_print(d, endstr='\n'):
 
 def elbo(weights_per_voice, chorale, z_distribution, beta):
     prior = Normal(torch.zeros_like(z_distribution.loc),
-                   torch.ones_like(z_distribution.scale)
-                   )
+                   torch.ones_like(z_distribution.scale))
     kl = kl_divergence(z_distribution, prior).sum(1)
 
     ce = categorical_crossentropy(weights_per_voice, chorale)
@@ -60,7 +84,7 @@ def chorale_accuracy(value, target):
 
 
 def log_normal(x, mean, log_var, eps=0.00001):
-    return - (x - mean) ** 2 / (2. * torch.exp(log_var) + eps) - log_var / 2. + c
+    return -(x - mean)**2 / (2. * torch.exp(log_var) + eps) - log_var / 2. + c
 
 
 def categorical_crossentropy(value, target, mask=None):
@@ -74,15 +98,15 @@ def categorical_crossentropy(value, target, mask=None):
     cross_entropy = nn.CrossEntropyLoss(size_average=False, reduce=False)
     sum = 0
 
-    for channel_probs, target_channel, mask_channel in zip(value,
-                                                           target.split(1, dim=2),
-                                                           mask.split(1, dim=2)):
+    for channel_probs, target_channel, mask_channel in zip(
+            value, target.split(1, dim=2), mask.split(1, dim=2)):
         # select relevent indices
         batch_size, num_events, num_tokens_of_channel = channel_probs.size()
         num_events_mask = mask_channel.sum() // batch_size
         assert mask_channel.sum() % batch_size == 0
 
-        probs = channel_probs[mask_channel.bool().repeat(1, 1, num_tokens_of_channel)]
+        probs = channel_probs[mask_channel.bool().repeat(
+            1, 1, num_tokens_of_channel)]
         target = target_channel[mask_channel.bool()]
 
         ce = cross_entropy(probs.view(-1, num_tokens_of_channel),
@@ -98,7 +122,6 @@ def distilled_categorical_crossentropy(value, target, mask=None):
     :param target: list of (batch_size, num_events, num_notes)
     :return:
     """
-
     def cross_entropy_from_logits(p, q):
         """
         sum softmax(p) log softmax(q)
@@ -123,7 +146,8 @@ def distilled_categorical_crossentropy(value, target, mask=None):
 
     sum = 0
     # TODO better mask horrible
-    for channel, channel_target, channel_mask in zip(value, target, mask.split(1, dim=2)):
+    for channel, channel_target, channel_mask in zip(value, target,
+                                                     mask.split(1, dim=2)):
         # channel is (batch_size, num_events, num_tokens_of_corresponding_channel)
         # channel_target is (batch_size, num_events)
         # TODO remove this loop
@@ -137,30 +161,30 @@ def distilled_categorical_crossentropy(value, target, mask=None):
     return sum
 
 
-def quantization_loss(loss_quantization_left,
-                      loss_quantization_negative,
+def quantization_loss(loss_quantization_left, loss_quantization_negative,
                       loss_quantization_right):
-    loss_quantization = torch.cat(
-        (loss_quantization_left.sum(2).sum(1),
-         loss_quantization_right.sum(2).sum(1),
-         loss_quantization_negative.sum(4).sum(3).sum(2).sum(1),
-         ), dim=0
-    ).mean()
+    loss_quantization = torch.cat((
+        loss_quantization_left.sum(2).sum(1),
+        loss_quantization_right.sum(2).sum(1),
+        loss_quantization_negative.sum(4).sum(3).sum(2).sum(1),
+    ),
+                                  dim=0).mean()
     return loss_quantization
+
 
 def quantization_loss_no_negative(loss_quantization_left,
-                      loss_quantization_right):
-    loss_quantization = torch.cat(
-        (loss_quantization_left.sum(2).sum(1),
-         loss_quantization_right.sum(2).sum(1),
-         ), dim=0
-    ).mean()
+                                  loss_quantization_right):
+    loss_quantization = torch.cat((
+        loss_quantization_left.sum(2).sum(1),
+        loss_quantization_right.sum(2).sum(1),
+    ),
+                                  dim=0).mean()
     return loss_quantization
 
+
 def to_sphere(t):
-    return t / t.norm(dim=-1,
-                      keepdim=True
-                      )
+    return t / t.norm(dim=-1, keepdim=True)
+
 
 def flatten(x):
     """
@@ -190,7 +214,8 @@ def unflatten(sequence, num_channels):
     num_events = sequence_length // num_channels
     remaining_dims = list(size[2:])
 
-    chorale = sequence.view(batch_size, num_events, num_channels, *remaining_dims)
+    chorale = sequence.view(batch_size, num_events, num_channels,
+                            *remaining_dims)
     return chorale
 
 
@@ -260,7 +285,10 @@ def plot_mi_marginals(px, py, mi_matrix, save_path):
     return
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
+def top_k_top_p_filtering(logits,
+                          top_k=0,
+                          top_p=0.0,
+                          filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (vocabulary size)
@@ -268,21 +296,25 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
             top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
     """
-    assert logits.dim() == 1  # batch size 1 for now - could be updated for more but the code would be less clear
+    assert logits.dim(
+    ) == 1  # batch size 1 for now - could be updated for more but the code would be less clear
     top_k = min(top_k, logits.size(-1))  # Safety check
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1,
+                                                                  None]
         logits[indices_to_remove] = filter_value
 
     if top_p > 0.0:
         sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+        cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1),
+                                        dim=-1)
 
         # Remove tokens with cumulative probability above the threshold
         sorted_indices_to_remove = cumulative_probs > top_p
         # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
+            ..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
 
         indices_to_remove = sorted_indices[sorted_indices_to_remove]
@@ -302,7 +334,8 @@ def log_prob_from_logits(x):
     # TF ordering
     axis = len(x.size()) - 1
     m, _ = torch.max(x, dim=axis, keepdim=True)
-    return x - m - torch.log(torch.sum(torch.exp(x - m), dim=axis, keepdim=True))
+    return x - m - torch.log(
+        torch.sum(torch.exp(x - m), dim=axis, keepdim=True))
 
 
 def discretized_mix_logistic_loss(x, l):
@@ -316,7 +349,8 @@ def discretized_mix_logistic_loss(x, l):
     # here and below: unpacking the params of the mixture of logistics
     nr_mix = int(ls[-1] / 10)
     logit_probs = l[:, :, :, :nr_mix]
-    l = l[:, :, :, nr_mix:].contiguous().view(xs + [nr_mix * 3])  # 3 for mean, scale, coef
+    l = l[:, :, :, nr_mix:].contiguous().view(
+        xs + [nr_mix * 3])  # 3 for mean, scale, coef
     means = l[:, :, :, :, :nr_mix]
     # log_scales = torch.max(l[:, :, :, :, nr_mix:2 * nr_mix], -7.)
     log_scales = torch.clamp(l[:, :, :, :, nr_mix:2 * nr_mix], min=-7.)
@@ -326,11 +360,13 @@ def discretized_mix_logistic_loss(x, l):
     # sub-pixels
     x = x.contiguous()
     x = x.unsqueeze(-1) + cuda_variable(torch.zeros(xs + [nr_mix]))
-    m2 = (means[:, :, :, 1, :] + coeffs[:, :, :, 0, :]
-          * x[:, :, :, 0, :]).view(xs[0], xs[1], xs[2], 1, nr_mix)
+    m2 = (means[:, :, :, 1, :] +
+          coeffs[:, :, :, 0, :] * x[:, :, :, 0, :]).view(
+              xs[0], xs[1], xs[2], 1, nr_mix)
 
     m3 = (means[:, :, :, 2, :] + coeffs[:, :, :, 1, :] * x[:, :, :, 0, :] +
-          coeffs[:, :, :, 2, :] * x[:, :, :, 1, :]).view(xs[0], xs[1], xs[2], 1, nr_mix)
+          coeffs[:, :, :, 2, :] * x[:, :, :, 1, :]).view(
+              xs[0], xs[1], xs[2], 1, nr_mix)
 
     means = torch.cat((means[:, :, :, 0, :].unsqueeze(3), m2, m3), dim=3)
     centered_x = x - means
@@ -363,10 +399,12 @@ def discretized_mix_logistic_loss(x, l):
     # the observed sub-pixel value
 
     inner_inner_cond = (cdf_delta > 1e-5).float()
-    inner_inner_out = inner_inner_cond * torch.log(torch.clamp(cdf_delta, min=1e-12)) + (
-                1. - inner_inner_cond) * (log_pdf_mid - np.log(127.5))
+    inner_inner_out = inner_inner_cond * torch.log(
+        torch.clamp(cdf_delta, min=1e-12)) + (1. - inner_inner_cond) * (
+            log_pdf_mid - np.log(127.5))
     inner_cond = (x > 0.999).float()
-    inner_out = inner_cond * log_one_minus_cdf_min + (1. - inner_cond) * inner_inner_out
+    inner_out = inner_cond * log_one_minus_cdf_min + (
+        1. - inner_cond) * inner_inner_out
     cond = (x < -0.999).float()
     log_probs = cond * log_cdf_plus + (1. - cond) * inner_out
     log_probs = torch.sum(log_probs, dim=3) + log_prob_from_logits(logit_probs)
@@ -385,7 +423,8 @@ def discretized_mix_logistic_loss_1d(x, l):
     # here and below: unpacking the params of the mixture of logistics
     nr_mix = int(ls[-1] / 3)
     logit_probs = l[:, :, :, :nr_mix]
-    l = l[:, :, :, nr_mix:].contiguous().view(xs + [nr_mix * 2])  # 2 for mean, scale
+    l = l[:, :, :,
+          nr_mix:].contiguous().view(xs + [nr_mix * 2])  # 2 for mean, scale
     means = l[:, :, :, :, :nr_mix]
     log_scales = torch.clamp(l[:, :, :, :, nr_mix:2 * nr_mix], min=-7.)
     # here and below: getting the means and adjusting them based on preceding
@@ -411,10 +450,12 @@ def discretized_mix_logistic_loss_1d(x, l):
     log_pdf_mid = mid_in - log_scales - 2. * torch.softplus(mid_in)
 
     inner_inner_cond = (cdf_delta > 1e-5).float()
-    inner_inner_out = inner_inner_cond * torch.log(torch.clamp(cdf_delta, min=1e-12)) + (
-                1. - inner_inner_cond) * (log_pdf_mid - np.log(127.5))
+    inner_inner_out = inner_inner_cond * torch.log(
+        torch.clamp(cdf_delta, min=1e-12)) + (1. - inner_inner_cond) * (
+            log_pdf_mid - np.log(127.5))
     inner_cond = (x > 0.999).float()
-    inner_out = inner_cond * log_one_minus_cdf_min + (1. - inner_cond) * inner_inner_out
+    inner_out = inner_cond * log_one_minus_cdf_min + (
+        1. - inner_cond) * inner_inner_out
     cond = (x < -0.999).float()
     log_probs = cond * log_cdf_plus + (1. - cond) * inner_out
     log_probs = torch.sum(log_probs, dim=3) + log_prob_from_logits(logit_probs)

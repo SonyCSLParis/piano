@@ -1,5 +1,5 @@
 import torch
-from DatasetManager.piano.piano_helper import MaestroIteratorGenerator
+from DatasetManager.piano.piano_helper import MaestroIteratorGenerator, PianoIteratorGenerator
 from DatasetManager.piano.piano_midi_dataset import PianoMidiDataset
 
 from BFT.dataloaders.dataloader import DataloaderGenerator
@@ -22,8 +22,12 @@ class PianoDataloaderGenerator(DataloaderGenerator):
 
         legacy = True
 
-        corpus_it_gen = MaestroIteratorGenerator(
-            composers_filter=[],
+        # corpus_it_gen = MaestroIteratorGenerator(
+        #     composers_filter=[],
+        #     num_elements=None
+        # )
+        corpus_it_gen = PianoIteratorGenerator(
+            subsets=[''],
             num_elements=None
         )
         # Positive dataset
