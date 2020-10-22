@@ -30,11 +30,11 @@ config = {
         dim_feedforward=1024,
         positional_embedding_size=256,
         dropout=0.1,
-
+        label_smoothing=True
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  2,
+    'batch_size':                  4,
     'num_batches':                 256,
     'num_epochs':                  2000,
 
