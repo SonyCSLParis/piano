@@ -65,6 +65,7 @@ def get_decoder(data_processor, decoder_type,
                 'positional_embedding_size'],
             num_channels_decoder=num_channels_decoder,
             num_events_decoder=num_events_decoder,
+            label_smoothing=decoder_kwargs['label_smoothing'],
             recurrent=not training_phase)
     else:
         raise NotImplementedError

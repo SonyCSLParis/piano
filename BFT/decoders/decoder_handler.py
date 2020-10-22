@@ -5,7 +5,7 @@ import torch
 import os
 from tqdm import tqdm
 from itertools import islice
-import datetime
+from datetime import datetime
 import numpy as np
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
@@ -28,7 +28,10 @@ class DecoderHandler:
 
     # ==== Wrappers
     def forward(self, target, h_pe_init=None):
-        return self.decoder(target, h_pe_init=h_pe_init)
+        return self.decoder.forward(target, h_pe_init=h_pe_init)
+    
+    def forward_step(self, target, state, i, h_pe):
+        return self.decoder.module.forward_step(target, state, i, h_pe)
 
     def train(self):
         self.decoder.train()
@@ -38,6 +41,23 @@ class DecoderHandler:
 
     def parameters(self):
         return self.decoder.parameters()
+    
+    # expose useful attributes for generation
+    @property
+    def recurrent(self):
+        return self.decoder.module.recurrent
+    
+    @property
+    def num_tokens_per_channel(self):
+        return self.decoder.module.num_tokens_per_channel
+    
+    @property
+    def num_channels_target(self):
+        return self.decoder.module.num_channels_target
+
+    @property
+    def data_processor(self):
+        return self.decoder.module.data_processor
 
     # ==== Save and Load methods
     def __repr__(self):
@@ -70,7 +90,7 @@ class DecoderHandler:
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:
-        if is_main_process() == 0:
+        if is_main_process():
             for k, v in monitored_quantities_train.items():
                 self.writer.add_scalar(f'{k}/train', v, epoch_id)
             for k, v in monitored_quantities_val.items():
@@ -127,7 +147,6 @@ class DecoderHandler:
             del loss
 
         # renormalize monitored quantities
-        # TODO CHECK if this removes the warnings
         for key, value in means.items():
             means[key] = all_reduce_scalar(value, average=True) / (sample_id + 1)
         
@@ -145,7 +164,7 @@ class DecoderHandler:
                     plot=False,
                     num_workers=0,
                     **kwargs):
-        if plot:
+        if plot and is_main_process():
             self.writer = SummaryWriter(f'{self.model_dir}')
 
         best_val = 1e8
@@ -267,6 +286,7 @@ class DecoderHandler:
         self.eval()
         # num_events = 4 * 4 * 24
         # num_events = 240
+        # TODO hardcoded
         num_events = 1024
 
         x = torch.zeros(batch_size, num_events,
@@ -376,10 +396,6 @@ class DecoderHandler:
             )
             # plt.show()
         plt.close()
-
-    def init_generation(self, num_events):
-        return cuda_variable(
-            torch.zeros(1, num_events, self.num_channels_target).long())
 
     # TODO put this in data_processor/dataloader_generator
     # but hard!

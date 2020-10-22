@@ -32,7 +32,7 @@ class LinearTransformerDecoder(nn.Module):
                  num_channels_decoder,
                  num_events_decoder,
                  dropout,
-                 # TODO pass arguments
+                 label_smoothing,
                  recurrent=False):
         # TODO Signature
         super(LinearTransformerDecoder, self).__init__()
@@ -74,7 +74,10 @@ class LinearTransformerDecoder(nn.Module):
             dim_feedforward=dim_feedforward,
             recurrent=recurrent
         )
-
+        
+        self.label_smoothing = label_smoothing
+        self.recurrent = recurrent
+        
         ######################################################
         # Output dimension adjustment
         self.pre_softmaxes = nn.ModuleList([nn.Linear(self.d_model, num_tokens_of_channel)
@@ -130,7 +133,8 @@ class LinearTransformerDecoder(nn.Module):
         loss = categorical_crossentropy(
             value=weights_per_category,
             target=target,
-            mask=torch.ones_like(target)
+            mask=torch.ones_like(target),
+            label_smoothing=self.label_smoothing
         )
 
         loss = loss.mean()

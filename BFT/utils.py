@@ -87,7 +87,7 @@ def log_normal(x, mean, log_var, eps=0.00001):
     return -(x - mean)**2 / (2. * torch.exp(log_var) + eps) - log_var / 2. + c
 
 
-def categorical_crossentropy(value, target, mask=None):
+def categorical_crossentropy(value, target, mask=None, label_smoothing=False):
     """
 
     :param value: list of (batch_size, num_events, num_tokens_of_corresponding_channel)
@@ -97,7 +97,7 @@ def categorical_crossentropy(value, target, mask=None):
     """
     cross_entropy = nn.CrossEntropyLoss(size_average=False, reduce=False)
     sum = 0
-
+    
     for channel_probs, target_channel, mask_channel in zip(
             value, target.split(1, dim=2), mask.split(1, dim=2)):
         # select relevent indices
@@ -109,8 +109,19 @@ def categorical_crossentropy(value, target, mask=None):
             1, 1, num_tokens_of_channel)]
         target = target_channel[mask_channel.bool()]
 
-        ce = cross_entropy(probs.view(-1, num_tokens_of_channel),
-                           target.view(-1))
+        probs = probs.view(-1, num_tokens_of_channel)
+        tgt = target.view(-1)
+        
+        if not label_smoothing:
+            ce = cross_entropy(probs, tgt)
+        else:
+            eps = 0.1
+            one_hot = torch.zeros_like(probs).scatter(1, tgt.view(-1, 1), 1)
+            one_hot = (one_hot * (1 - eps) + 
+                       (1 - one_hot) * eps / (num_tokens_of_channel - 1)
+            )
+            log_prb = nn.functional.log_softmax(probs, dim=1)
+            ce = -(one_hot * log_prb).sum(dim=1)
         sum = sum + ce
     return sum
 
