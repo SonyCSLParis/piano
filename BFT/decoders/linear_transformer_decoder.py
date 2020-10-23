@@ -1,3 +1,4 @@
+from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
 from datetime import datetime
 
 
@@ -24,7 +25,9 @@ import torch
 class LinearTransformerDecoder(nn.Module):
     def __init__(self,
                  data_processor: DataProcessor,
+                 dataloader_generator: DataloaderGenerator,
                  d_model,
+                 # TODO get positional embedding
                  num_decoder_layers,
                  n_head,
                  dim_feedforward,
@@ -37,6 +40,8 @@ class LinearTransformerDecoder(nn.Module):
         # TODO Signature
         super(LinearTransformerDecoder, self).__init__()
         self.data_processor = data_processor
+        # can be useful
+        self.dataloader_generator = dataloader_generator
 
         # Compute num_tokens for source and target
         self.num_tokens_per_channel = self.data_processor.num_tokens_per_channel
@@ -49,13 +54,21 @@ class LinearTransformerDecoder(nn.Module):
 
         ######################################################
         # Embeddings
-        self.target_positional_embedding = SinusoidalPositionalEmbeddingChannels(
+        # self.target_positional_embedding = SinusoidalPositionalEmbeddingChannels(
+        #     positional_embedding_size=positional_embedding_size,
+        #     num_channels=num_channels_decoder,
+        #     num_tokens_max=1024 * 4,  # TODO hard coded
+        #     dropout=0.1
+        # )
+
+        self.target_positional_embedding = SinusoidalElapsedTimeEmbedding(
             positional_embedding_size=positional_embedding_size,
+            dataloader_generator=self.dataloader_generator,
             num_channels=num_channels_decoder,
             num_tokens_max=1024 * 4,  # TODO hard coded
             dropout=0.1
         )
-
+        
         linear_target_input_size = self.d_model - positional_embedding_size
         self.linear_target = nn.Linear(
             self.data_processor.embedding_size,
@@ -96,13 +109,16 @@ class LinearTransformerDecoder(nn.Module):
         batch_size, num_events, num_channels = target.size()
 
         target = self.data_processor.preprocess(target)
+        
         target_embedded = self.data_processor.embed(target)
         target_embedded = self.linear_target(target_embedded)
         target_seq = flatten(target_embedded)
 
         num_tokens_target = target_seq.size(1)
         # add positional embeddings
-        target_seq, h_pe = self.target_positional_embedding(target_seq, h=h_pe_init)
+        
+        # TODO changer signature des positional_embeddings pour recevoir d'autres tensors
+        target_seq, h_pe = self.target_positional_embedding(target_seq, h=h_pe_init, target=target)
 
         # shift target_seq by one
         # Pad

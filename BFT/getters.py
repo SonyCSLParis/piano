@@ -48,14 +48,18 @@ def get_data_processor(dataloader_generator, data_processor_type,
 
 
 # todo write Decoder base class
-def get_decoder(data_processor, decoder_type,
+def get_decoder(data_processor, 
+                dataloader_generator,
+                decoder_type,
                 decoder_kwargs, training_phase):
     num_channels_decoder = data_processor.num_channels
     num_events_decoder = data_processor.num_events
-
+    # TODO add get positional embedding
+    
     if decoder_type == 'linear_transformer':
         decoder = LinearTransformerDecoder(
             data_processor=data_processor,
+            dataloader_generator=dataloader_generator,
             d_model=decoder_kwargs['d_model'],
             num_decoder_layers=decoder_kwargs['num_decoder_layers'],
             n_head=decoder_kwargs['n_head'],

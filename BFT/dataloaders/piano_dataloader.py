@@ -79,3 +79,18 @@ class PianoDataloaderGenerator(DataloaderGenerator):
         score = self.dataset.tensor_to_score(sequences, fill_features=None)
         score.write(f'{path}.mid')
         return torch
+    
+    def get_elapsed_time(self, x):
+        """
+        x is (batch_size, num_events, num_channels)
+        """
+        assert 'time_shift' in self.features
+        
+        timeshift_indices = x[:, :, self.features.index('time_shift')]
+        # convert timeshift indices to their actual duration:
+        y = self.dataset.timeshift_indices_to_elapsed_time(
+            timeshift_indices,
+            smallest_time_shift=0.02
+        )
+        return y.cumsum(dim=-1)
+        

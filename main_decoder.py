@@ -89,6 +89,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         data_processor_kwargs=config['data_processor_kwargs'])
 
     decoder = get_decoder(data_processor=data_processor,
+                          dataloader_generator=dataloader_generator,
                           decoder_type=config['decoder_type'],
                           decoder_kwargs=config['decoder_kwargs'],
                           training_phase=train)
