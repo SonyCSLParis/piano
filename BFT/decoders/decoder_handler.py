@@ -27,11 +27,11 @@ class DecoderHandler:
         self.optimizer = torch.optim.Adam(list(self.parameters()), lr=lr)
 
     # ==== Wrappers
-    def forward(self, x, h_pe_init=None):
-        return self.decoder.forward(x, h_pe_init=h_pe_init)
+    def forward(self, target, h_pe_init=None):
+        return self.decoder.forward(target, h_pe_init=h_pe_init)
     
-    def forward_step(self, x, state, i, h_pe):
-        return self.decoder.module.forward_step(x, state, i, h_pe)
+    def forward_step(self, target, state, i, h_pe):
+        return self.decoder.module.forward_step(target, state, i, h_pe)
 
     def train(self):
         self.decoder.train()
@@ -124,7 +124,9 @@ class DecoderHandler:
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
-            forward_pass = self.forward(target=x, h_pe_init=h_pe_init)
+            forward_pass = self.forward(
+                target=x,
+                h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
 
