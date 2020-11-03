@@ -1,8 +1,9 @@
+from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding
 from torch import nn
 import torch
 
 
-class LearntEmbeddings(nn.Module):
+class LearntEmbeddings(BasePositionalEmbedding):
 
     def __init__(self,
                  positional_embedding_size,
@@ -27,17 +28,7 @@ class LearntEmbeddings(nn.Module):
             )
         )
 
-    def forward(self, x, i=0, h=None):
-        """
-
-        :param x: (
-        batch_size,
-        num_tokens
-        d_model - positional_embedding_size
-        )
-        :param i:
-        :return:
-        """
+    def forward(self, x, i=0, h=None, target=None):
         batch_size, num_tokens, _ = x.size()
         assert i < self.num_channels
         # create init sequence

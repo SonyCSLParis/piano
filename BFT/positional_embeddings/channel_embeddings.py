@@ -1,24 +1,24 @@
+from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding
 from torch import nn
 import torch
 
 
-class ChannelEmbeddings(nn.Module):
+class ChannelEmbeddings(BasePositionalEmbedding):
 
     def __init__(self,
                  positional_embedding_size,
                  num_channels,
-                 # **kwargs
                  ):
         super(ChannelEmbeddings, self).__init__()
         self.num_channels = num_channels
-
+        self.positional_embedding_size = positional_embedding_size
         self.pe_0 = nn.Parameter(
             torch.randn(
                 1, num_channels, positional_embedding_size
             )
         )
 
-    def forward(self, x, i=0, h=None):
+    def forward(self, x, i=0, h=None, target=None):
         """
 
         :param x: (
@@ -45,7 +45,7 @@ class ChannelEmbeddings(nn.Module):
 
         return x, h
 
-    def forward_step(self, x, i=0, h=None):
+    def forward_step(self, x, i=0, h=None, target=None):
         """
 
         :param x: (

@@ -21,6 +21,25 @@ config = {
         embedding_size=32,
     ),  # Can be different from the encoder's data processor
 
+    # --- Positional Embedding ---
+    'positional_embedding_dict': dict(
+        # 'channel_embedding': dict()
+        sinusoidal_embedding= dict(
+            positional_embedding_size=128,
+            num_channels=4,
+            dropout=0.2
+        ),
+        sinusoidal_elapsed_time_embedding=dict(
+            positional_embedding_size=128,
+            num_channels=4,
+            dropout=0.2
+        ),
+        channel_embedding=dict(
+            positional_embedding_size=12,
+            num_channels=4
+        )
+    ),
+        
     # --- Decoder ---
     'decoder_type':                'linear_transformer',
     'decoder_kwargs':              dict(
@@ -28,7 +47,6 @@ config = {
         n_head=8,
         num_decoder_layers=8,
         dim_feedforward=1024,
-        positional_embedding_size=256,
         dropout=0.1,
         label_smoothing=True
     ),
