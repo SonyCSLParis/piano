@@ -82,7 +82,6 @@ def get_decoder(data_processor, dataloader_generator,
                 decoder_kwargs, training_phase):
     num_channels_decoder = data_processor.num_channels
     num_events_decoder = data_processor.num_events
-    # TODO add get positional embedding
 
     if decoder_type == 'linear_transformer':
         decoder = LinearTransformerDecoder(
