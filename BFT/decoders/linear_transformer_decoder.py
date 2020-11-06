@@ -1,3 +1,5 @@
+from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
+from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
 from datetime import datetime
 
 
@@ -12,8 +14,7 @@ from BFT.dataloaders.dataloader import DataloaderGenerator
 from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
 from BFT.positional_embeddings.learnt_embeddings import LearntEmbeddings
 from BFT.positional_embeddings.recurrent_positional_embedding import RecurrentPositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding, \
-    SinusoidalPositionalEmbeddingChannels
+from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
 from BFT.transformers.linear_transformer import LinearTransformer
 from BFT.utils import flatten, categorical_crossentropy, dict_pretty_print, top_k_top_p_filtering, \
     to_numpy, cuda_variable
@@ -24,11 +25,12 @@ import torch
 class LinearTransformerDecoder(nn.Module):
     def __init__(self,
                  data_processor: DataProcessor,
+                 dataloader_generator: DataloaderGenerator,
+                 positional_embedding: PositionalEmbedding,
                  d_model,
                  num_decoder_layers,
                  n_head,
                  dim_feedforward,
-                 positional_embedding_size,
                  num_channels_decoder,
                  num_events_decoder,
                  dropout,
@@ -37,6 +39,8 @@ class LinearTransformerDecoder(nn.Module):
         # TODO Signature
         super(LinearTransformerDecoder, self).__init__()
         self.data_processor = data_processor
+        # can be useful
+        self.dataloader_generator = dataloader_generator
 
         # Compute num_tokens for source and target
         self.num_tokens_per_channel = self.data_processor.num_tokens_per_channel
@@ -49,13 +53,9 @@ class LinearTransformerDecoder(nn.Module):
 
         ######################################################
         # Embeddings
-        self.target_positional_embedding = SinusoidalPositionalEmbeddingChannels(
-            positional_embedding_size=positional_embedding_size,
-            num_channels=num_channels_decoder,
-            num_tokens_max=1024 * 4,  # TODO hard coded
-            dropout=0.1
-        )
-
+        self.target_positional_embedding = positional_embedding
+        positional_embedding_size = self.target_positional_embedding.positional_embedding_size
+        
         linear_target_input_size = self.d_model - positional_embedding_size
         self.linear_target = nn.Linear(
             self.data_processor.embedding_size,
@@ -96,13 +96,14 @@ class LinearTransformerDecoder(nn.Module):
         batch_size, num_events, num_channels = target.size()
 
         target = self.data_processor.preprocess(target)
+        
         target_embedded = self.data_processor.embed(target)
         target_embedded = self.linear_target(target_embedded)
         target_seq = flatten(target_embedded)
 
-        num_tokens_target = target_seq.size(1)
+
         # add positional embeddings
-        target_seq, h_pe = self.target_positional_embedding(target_seq, h=h_pe_init)
+        target_seq, h_pe = self.target_positional_embedding(target_seq, i=0, h=h_pe_init, target=target)
 
         # shift target_seq by one
         # Pad
@@ -170,7 +171,8 @@ class LinearTransformerDecoder(nn.Module):
             target_seq, h_pe = self.target_positional_embedding.forward_step(
                 target_embedded,
                 i=(i - 1),
-                h=h_pe)
+                h=h_pe,
+                target=target)
 
         output, state = self.transformer.forward_step(
             target_seq, state=state

@@ -124,7 +124,9 @@ class DecoderHandler:
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
-            forward_pass = self.forward(target=x, h_pe_init=h_pe_init)
+            forward_pass = self.forward(
+                target=x,
+                h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
 
