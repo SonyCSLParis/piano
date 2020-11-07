@@ -1,3 +1,4 @@
+from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder, LinearTransformerEncoderDecoder
 from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
 from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding, PositionalEmbedding
 from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
@@ -8,7 +9,7 @@ from BFT.dataloaders.bach_dataloader import BachDataloaderGenerator
 import numpy as np
 
 from BFT.dataloaders.piano_dataloader import PianoDataloaderGenerator
-from BFT.decoders.linear_transformer_decoder import LinearTransformerDecoder
+from BFT.decoders.linear_transformer_decoder import CausalEncoder
 
 
 def get_dataloader_generator(dataset, dataloader_generator_kwargs):
@@ -25,6 +26,7 @@ def get_dataloader_generator(dataset, dataloader_generator_kwargs):
 
 def get_data_processor(dataloader_generator, data_processor_type,
                        data_processor_kwargs):
+
     if data_processor_type == 'bach':
         # compute num_events num_tokens_per_channel
         dataset = dataloader_generator.dataset
@@ -51,22 +53,47 @@ def get_data_processor(dataloader_generator, data_processor_type,
     return data_processor
 
 
-def get_positional_embedding(dataloader_generator, positional_embedding_dict) -> PositionalEmbedding:
+def get_ED_data_processor(dataloader_generator, data_processor_type,
+                          data_processor_kwargs):
+
+    if data_processor_type == 'bach':
+        # TODO
+        raise NotImplementedError
+    elif data_processor_type == 'masked_piano':
+        num_events = dataloader_generator.dataset.sequence_size
+        value2index = dataloader_generator.dataset.value2index
+        num_tokens_per_channel = [
+            len(value2index[feature])
+            for feature in dataloader_generator.features
+        ]
+        data_processor = PianoDataProcessor(
+            embedding_size=data_processor_kwargs['embedding_size'],
+            num_events=num_events,
+            num_tokens_per_channel=num_tokens_per_channel)
+    else:
+        raise NotImplementedError
+
+    return data_processor
+
+
+def get_positional_embedding(dataloader_generator,
+                             positional_embedding_dict) -> PositionalEmbedding:
     base_positional_embedding_list = []
     for pe_name, pe_kwargs in positional_embedding_dict.items():
         if pe_name == 'sinusoidal_embedding':
-            num_tokens_max = (dataloader_generator.dataset.sequence_size * dataloader_generator.num_channels)
+            num_tokens_max = (dataloader_generator.dataset.sequence_size *
+                              dataloader_generator.num_channels)
             base_pe: BasePositionalEmbedding = SinusoidalPositionalEmbedding(
-                positional_embedding_size=pe_kwargs['positional_embedding_size'],
+                positional_embedding_size=pe_kwargs[
+                    'positional_embedding_size'],
                 num_tokens_max=num_tokens_max,
                 num_channels=pe_kwargs['num_channels'],
                 dropout=pe_kwargs['dropout'])
         elif pe_name == 'channel_embedding':
-            base_pe = ChannelEmbeddings(
-                **pe_kwargs
-            )
+            base_pe = ChannelEmbeddings(**pe_kwargs)
         elif pe_name == 'sinusoidal_elapsed_time_embedding':
-            base_pe:BasePositionalEmbedding = SinusoidalElapsedTimeEmbedding(dataloader_generator=dataloader_generator, **pe_kwargs)
+            base_pe: BasePositionalEmbedding = SinusoidalElapsedTimeEmbedding(
+                dataloader_generator=dataloader_generator, **pe_kwargs)
         else:
             raise NotImplementedError
         base_positional_embedding_list.append(base_pe)
@@ -76,15 +103,13 @@ def get_positional_embedding(dataloader_generator, positional_embedding_dict) ->
 
 
 # todo write Decoder base class
-def get_decoder(data_processor, dataloader_generator,
-                positional_embedding,
-                decoder_type,
-                decoder_kwargs, training_phase):
+def get_decoder(data_processor, dataloader_generator, positional_embedding,
+                decoder_type, decoder_kwargs, training_phase):
     num_channels_decoder = data_processor.num_channels
     num_events_decoder = data_processor.num_events
 
     if decoder_type == 'linear_transformer':
-        decoder = LinearTransformerDecoder(
+        decoder = CausalEncoder(
             data_processor=data_processor,
             dataloader_generator=dataloader_generator,
             positional_embedding=positional_embedding,
@@ -95,6 +120,40 @@ def get_decoder(data_processor, dataloader_generator,
             dropout=decoder_kwargs['dropout'],
             num_channels_decoder=num_channels_decoder,
             num_events_decoder=num_events_decoder,
+            label_smoothing=decoder_kwargs['label_smoothing'],
+            recurrent=not training_phase)
+    else:
+        raise NotImplementedError
+
+    return decoder
+
+
+def get_encoder_decoder(data_processor, 
+                        dataloader_generator,
+                        positional_embedding_source,
+                        positional_embedding_target,
+                        decoder_type, decoder_kwargs,
+                        training_phase):
+
+    if decoder_type == 'linear_transformer':
+        decoder = EncoderDecoder(
+            data_processor=data_processor,
+            dataloader_generator=dataloader_generator,
+            positional_embedding_target=positional_embedding_target,
+            positional_embedding_source=positional_embedding_source,
+            d_model_encoder=decoder_kwargs['d_model_encoder'],
+            d_model_decoder=decoder_kwargs['d_model_deocder'],
+            num_layers_decoder=decoder_kwargs['num_layers_decoder'],
+            num_layers_encoder=decoder_kwargs['num_layers_encoder'],
+            n_head_encoder=decoder_kwargs['n_head_encoder'],
+            n_head_decoder=decoder_kwargs['n_head_decoder'],
+            dim_feedforward_encoder=decoder_kwargs['dim_feedforward_encoder'],
+            dim_feedforward_decoder=decoder_kwargs['dim_feedforward_decoder'],
+            dropout=decoder_kwargs['dropout'],
+            num_channels_target=data_processor.num_channels_target,
+            num_channels_source=data_processor.num_channels_source,
+            num_events_target=data_processor.num_events_target,
+            num_events_source=data_processor.num_events_source,
             label_smoothing=decoder_kwargs['label_smoothing'],
             recurrent=not training_phase)
     else:

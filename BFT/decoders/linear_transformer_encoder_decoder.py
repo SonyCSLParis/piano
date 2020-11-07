@@ -1,3 +1,4 @@
+
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
 from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
 from datetime import datetime
@@ -15,46 +16,52 @@ from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
 from BFT.positional_embeddings.learnt_embeddings import LearntEmbeddings
 from BFT.positional_embeddings.recurrent_positional_embedding import RecurrentPositionalEmbedding
 from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
-from BFT.transformers.linear_transformer import LinearTransformerCausalEncoder
+from BFT.transformers.linear_transformer import LinearTransformerCausalDecoder, LinearTransformerCausalEncoder, LinearTransformerEncoder
 from BFT.utils import flatten, categorical_crossentropy, dict_pretty_print, top_k_top_p_filtering, \
     to_numpy, cuda_variable
 import os
 import torch
 
 
-class CausalEncoder(nn.Module):
+class EncoderDecoder(nn.Module):
     def __init__(self,
                  data_processor: DataProcessor,
                  dataloader_generator: DataloaderGenerator,
-                 positional_embedding: PositionalEmbedding,
-                 d_model,
-                 num_decoder_layers,
-                 n_head,
-                 dim_feedforward,
-                 num_channels_decoder,
-                 num_events_decoder,
+                 positional_embedding_source: PositionalEmbedding,
+                 positional_embedding_target: PositionalEmbedding,
+                 d_model_encoder,
+                 d_model_decoder,
+                 num_layers_encoder,
+                 num_layers_decoder,
+                 n_head_encoder,
+                 n_head_decoder,
+                 dim_feedforward_encoder,
+                 dim_feedforward_decoder,
+                 num_channels_source,
+                 num_channels_target,
+                 num_events_source,
+                 num_events_target,
                  dropout,
                  label_smoothing,
                  recurrent=False):
         # TODO Signature
-        super(CausalEncoder, self).__init__()
+        super(EncoderDecoder, self).__init__()
         self.data_processor = data_processor
         # can be useful
         self.dataloader_generator = dataloader_generator
 
         # Compute num_tokens for source and target
-        self.num_tokens_per_channel = self.data_processor.num_tokens_per_channel
-        self.num_channels_target = len(self.num_tokens_per_channel)
-        assert self.num_channels_target == num_channels_decoder
-        self.d_model = d_model
+        
+        self.num_channels_target = num_channels_target
+        self.num_channels_source = num_channels_source
+        
         self.num_tokens_target = self.data_processor.num_tokens
-
-        assert self.num_tokens_target == num_channels_decoder * num_events_decoder
 
         ######################################################
         # Embeddings
-        self.target_positional_embedding = positional_embedding
-        positional_embedding_size = self.target_positional_embedding.positional_embedding_size
+        self.positional_embedding_source = positional_embedding_source
+        self.positional_embedding_target = positional_embedding_target
+        positional_embedding_target_size = self.target_positional_embedding.positional_embedding_size
         
         linear_target_input_size = self.d_model - positional_embedding_size
         self.linear_target = nn.Linear(
@@ -67,14 +74,21 @@ class CausalEncoder(nn.Module):
         self.sos_target = nn.Parameter(torch.randn((1, 1, self.d_model)))
 
         ######################################################
-        self.transformer = LinearTransformerCausalEncoder(
-            d_model=d_model,
-            n_heads=n_head,
-            n_layers=num_decoder_layers,
-            dim_feedforward=dim_feedforward,
+        self.encoder = LinearTransformerEncoder(
+            d_model=d_model_encoder,
+            n_heads=n_head_encoder,
+            n_layers=num_layers_encoder,
+            dim_feedforward=dim_feedforward_encoder,
             recurrent=recurrent
         )
         
+        self.decoder = LinearTransformerCausalDecoder(
+            d_model=d_model_decoder,
+            n_heads=n_head_decoder,
+            n_layers=num_layers_decoder,
+            dim_feedforward=dim_feedforward_decoder,
+            recurrent=recurrent
+        )
         self.label_smoothing = label_smoothing
         self.recurrent = recurrent
         
@@ -88,12 +102,15 @@ class CausalEncoder(nn.Module):
     def __repr__(self) -> str:
         return 'LinearTransformerDecoder'
 
-    def forward(self, target, h_pe_init=None):
+    def forward(self, source, target, h_pe_init=None):
         """
         :param target: sequence of tokens (batch_size, num_events, num_channels)
         :return:
         """
-        batch_size, num_events, num_channels = target.size()
+        batch_size, num_events_target, num_channels_target = target.size()
+        batch_size, num_events_source, num_channels_source = source.size()
+        
+        
 
         target = self.data_processor.preprocess(target)
         
