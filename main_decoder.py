@@ -2,7 +2,7 @@
 @author: Gaetan Hadjeres
 """
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.decoders.decoder_handler import DecoderHandler
+from BFT.handlers.decoder_handler import DecoderHandler
 import importlib
 import os
 import shutil
@@ -74,7 +74,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
     # os.environ['MASTER_PORT'] = '12356'
-    os.environ['MASTER_PORT'] = '12357'
+    # os.environ['MASTER_PORT'] = '12357'
+    os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -109,7 +110,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
                                         output_device=rank)
 
     decoder_handler = DecoderHandler(
-        decoder=decoder,
+        model=decoder,
         model_dir=model_dir,
         dataloader_generator=dataloader_generator)
 

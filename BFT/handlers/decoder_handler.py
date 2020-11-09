@@ -16,34 +16,9 @@ import torch.distributed as dist
 class DecoderHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
-        super().___init__(model=model,
+        super().__init__(model=model,
                           model_dir=model_dir,
                           dataloader_generator=dataloader_generator)
-
-    def save(self, early_stopped):
-        # Only save on process 0
-        if dist.get_rank() == 0:
-            # This saves also the encoder
-            if early_stopped:
-                model_dir = f'{self.model_dir}/early_stopped'
-            else:
-                model_dir = f'{self.model_dir}/overfitted'
-            if not os.path.exists(model_dir):
-                os.makedirs(model_dir)
-            torch.save(self.decoder.state_dict(), f'{model_dir}/decoder')
-        dist.barrier()
-
-    def load(self, early_stopped):
-        map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
-        print(f'Loading models {self.__repr__()}')
-        if early_stopped:
-            print('Load early stopped model')
-            model_dir = f'{self.model_dir}/early_stopped'
-        else:
-            print('Load over-fitted model')
-            model_dir = f'{self.model_dir}/overfitted'
-        self.decoder.load_state_dict(
-            torch.load(f'{model_dir}/decoder', map_location=map_location))
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:

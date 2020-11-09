@@ -110,7 +110,9 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     encoder_decoder.to(device)
     encoder_decoder = DistributedDataParallel(module=encoder_decoder,
                                       device_ids=[rank],
-                                      output_device=rank)
+                                      output_device=rank,
+                                      find_unused_parameters=True
+                                      )
 
     handler = EncoderDecoderHandler(model=encoder_decoder,
                                      model_dir=model_dir,
@@ -147,7 +149,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #                                      midi_file='inputs/Test_X_1.mid')
     scores = handler.generate(temperature=1.,
                                       batch_size=3,
-                                      top_p=0.95,
+                                      top_p=0.9,
                                       top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')

@@ -16,7 +16,7 @@ from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
 from BFT.positional_embeddings.learnt_embeddings import LearntEmbeddings
 from BFT.positional_embeddings.recurrent_positional_embedding import RecurrentPositionalEmbedding
 from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
-from BFT.transformers.linear_transformer import LinearTransformerCausalDecoder, LinearTransformerCausalEncoder, LinearTransformerEncoder
+from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDecoder, LinearTransformerCausalDiagonalDecoder, LinearTransformerCausalEncoder, LinearTransformerEncoder
 from BFT.utils import flatten, categorical_crossentropy, dict_pretty_print, top_k_top_p_filtering, \
     to_numpy, cuda_variable
 import os
@@ -81,7 +81,7 @@ class EncoderDecoder(nn.Module):
         self.sos_target = nn.Parameter(torch.randn((1, 1, self.d_model)))
 
         ######################################################
-        self.encoder = LinearTransformerEncoder(
+        self.encoder = LinearTransformerAnticausalEncoder(
             d_model=d_model_encoder,
             n_heads=n_head_encoder,
             n_layers=num_layers_encoder,
@@ -89,7 +89,7 @@ class EncoderDecoder(nn.Module):
             recurrent=recurrent
         )
         
-        self.decoder = LinearTransformerCausalDecoder(
+        self.decoder = LinearTransformerCausalDiagonalDecoder(
             d_model=d_model_decoder,
             n_heads=n_head_decoder,
             n_layers=num_layers_decoder,
