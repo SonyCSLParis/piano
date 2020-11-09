@@ -15,13 +15,10 @@ import torch.distributed as dist
 class Handler:
     def __init__(self, model: DistributedDataParallel,
                  model_dir: str,
-                 dataloader_generator: DataloaderGenerator,
-                 data_processor) -> None:
+                 dataloader_generator: DataloaderGenerator) -> None:
         self.model = model
         self.model_dir = model_dir
-        self.dataloader_generator = dataloader_generator
-        self.data_processor = data_processor
-        
+        self.dataloader_generator = dataloader_generator        
         # optim
         self.optimizer = None
         self.scheduler = None

@@ -3,7 +3,6 @@
 """
 from BFT.handlers.encoder_decoder_handler import EncoderDecoderHandler
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.decoders.decoder_handler import DecoderHandler
 import importlib
 import os
 import shutil
@@ -16,7 +15,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from BFT.data_processors.data_processor import DataProcessor
-from BFT.getters import get_dataloader_generator, get_data_processor, get_decoder, get_encoder_decoder, get_positional_embedding
+from BFT.getters import get_dataloader_generator, get_ED_data_processor, get_encoder_decoder, get_positional_embedding
 
 
 @click.command()
@@ -73,8 +72,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
          model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-    # os.environ['MASTER_PORT'] = '12356'
+    # os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
@@ -87,7 +86,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         dataloader_generator_kwargs=config['dataloader_generator_kwargs'])
 
     # data processor
-    data_processor: DataProcessor = get_data_processor(
+    data_processor = get_ED_data_processor(
         dataloader_generator=dataloader_generator,
         data_processor_type=config['data_processor_type'],
         data_processor_kwargs=config['data_processor_kwargs'])
@@ -99,34 +98,33 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     positional_embedding_target: PositionalEmbedding = get_positional_embedding(
         dataloader_generator=dataloader_generator,
         positional_embedding_dict=config['positional_embedding_target_dict'])
-    decoder = get_encoder_decoder(
+    encoder_decoder = get_encoder_decoder(
         data_processor=data_processor,
         dataloader_generator=dataloader_generator,
         positional_embedding_source=positional_embedding_source,
         positional_embedding_target=positional_embedding_target,
-        decoder_type=config['decoder_type'],
-        decoder_kwargs=config['decoder_kwargs'],
+        encoder_decoder_type=config['encoder_decoder_type'],
+        encoder_decoder_kwargs=config['encoder_decoder_kwargs'],
         training_phase=train)
 
-    decoder.to(device)
-    decoder = DistributedDataParallel(module=decoder,
+    encoder_decoder.to(device)
+    encoder_decoder = DistributedDataParallel(module=encoder_decoder,
                                       device_ids=[rank],
                                       output_device=rank)
 
-    decoder_handler = EncoderDecoderHandler(decoder=decoder,
+    handler = EncoderDecoderHandler(model=encoder_decoder,
                                      model_dir=model_dir,
-                                     dataloader_generator=dataloader_generator,
-                                     data_processor=data_processor
+                                     dataloader_generator=dataloader_generator
                                      )
 
     if load:
         if overfitted:
-            decoder_handler.load(early_stopped=False)
+            handler.load(early_stopped=False)
         else:
-            decoder_handler.load(early_stopped=True)
+            handler.load(early_stopped=True)
 
     if train:
-        decoder_handler.train_model(
+        handler.train_model(
             batch_size=config['batch_size'],
             num_batches=config['num_batches'],
             num_epochs=config['num_epochs'],
@@ -142,12 +140,12 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #     top_p=0.9,
     #     top_k=0)
 
-    # scores = decoder_handler.generate_completion(num_completions=3,
+    # scores = handler.generate_completion(num_completions=3,
     #                                      temperature=1.,
     #                                      top_p=0.9,
     #                                      top_k=0,
     #                                      midi_file='inputs/Test_X_1.mid')
-    scores = decoder_handler.generate(temperature=1.,
+    scores = handler.generate(temperature=1.,
                                       batch_size=3,
                                       top_p=0.95,
                                       top_k=0)

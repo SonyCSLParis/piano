@@ -15,12 +15,10 @@ import torch.distributed as dist
 
 class DecoderHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
-                 dataloader_generator: DataloaderGenerator,
-                 data_processor) -> None:
+                 dataloader_generator: DataloaderGenerator) -> None:
         super().___init__(model=model,
                           model_dir=model_dir,
-                          dataloader_generator=dataloader_generator,
-                          data_processor=data_processor)
+                          dataloader_generator=dataloader_generator)
 
     def save(self, early_stopped):
         # Only save on process 0

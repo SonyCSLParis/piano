@@ -1,10 +1,10 @@
-from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder, LinearTransformerEncoderDecoder
+from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder
 from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
 from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding, PositionalEmbedding
 from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
 from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
 from BFT.data_processors.bach_data_processor import BachDataProcessor
-from BFT.data_processors.piano_data_processor import PianoDataProcessor
+from BFT.data_processors.piano_data_processor import MaskedPianoEDDataProcessor, PianoDataProcessor
 from BFT.dataloaders.bach_dataloader import BachDataloaderGenerator
 import numpy as np
 
@@ -66,7 +66,7 @@ def get_ED_data_processor(dataloader_generator, data_processor_type,
             len(value2index[feature])
             for feature in dataloader_generator.features
         ]
-        data_processor = PianoDataProcessor(
+        data_processor = MaskedPianoEDDataProcessor(
             embedding_size=data_processor_kwargs['embedding_size'],
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel)
@@ -132,29 +132,30 @@ def get_encoder_decoder(data_processor,
                         dataloader_generator,
                         positional_embedding_source,
                         positional_embedding_target,
-                        decoder_type, decoder_kwargs,
+                        encoder_decoder_type,
+                        encoder_decoder_kwargs,
                         training_phase):
 
-    if decoder_type == 'linear_transformer':
+    if encoder_decoder_type == 'linear_transformer':
         decoder = EncoderDecoder(
             data_processor=data_processor,
             dataloader_generator=dataloader_generator,
             positional_embedding_target=positional_embedding_target,
             positional_embedding_source=positional_embedding_source,
-            d_model_encoder=decoder_kwargs['d_model_encoder'],
-            d_model_decoder=decoder_kwargs['d_model_deocder'],
-            num_layers_decoder=decoder_kwargs['num_layers_decoder'],
-            num_layers_encoder=decoder_kwargs['num_layers_encoder'],
-            n_head_encoder=decoder_kwargs['n_head_encoder'],
-            n_head_decoder=decoder_kwargs['n_head_decoder'],
-            dim_feedforward_encoder=decoder_kwargs['dim_feedforward_encoder'],
-            dim_feedforward_decoder=decoder_kwargs['dim_feedforward_decoder'],
-            dropout=decoder_kwargs['dropout'],
+            d_model_encoder=encoder_decoder_kwargs['d_model_encoder'],
+            d_model_decoder=encoder_decoder_kwargs['d_model_decoder'],
+            num_layers_decoder=encoder_decoder_kwargs['num_layers_decoder'],
+            num_layers_encoder=encoder_decoder_kwargs['num_layers_encoder'],
+            n_head_encoder=encoder_decoder_kwargs['n_head_encoder'],
+            n_head_decoder=encoder_decoder_kwargs['n_head_decoder'],
+            dim_feedforward_encoder=encoder_decoder_kwargs['dim_feedforward_encoder'],
+            dim_feedforward_decoder=encoder_decoder_kwargs['dim_feedforward_decoder'],
+            dropout=encoder_decoder_kwargs['dropout'],
             num_channels_target=data_processor.num_channels_target,
             num_channels_source=data_processor.num_channels_source,
             num_events_target=data_processor.num_events_target,
             num_events_source=data_processor.num_events_source,
-            label_smoothing=decoder_kwargs['label_smoothing'],
+            label_smoothing=encoder_decoder_kwargs['label_smoothing'],
             recurrent=not training_phase)
     else:
         raise NotImplementedError

@@ -62,15 +62,16 @@ config = {
         d_model_decoder=512,
         n_head_encoder=8,
         n_head_decoder=8,
-        num_layers_encoder=8,
+        num_layers_encoder=4,
         num_layers_decoder=8,
-        dim_feedforward=1024,
+        dim_feedforward_encoder=1024,
+        dim_feedforward_decoder=1024,
         dropout=0.1,
-        label_smoothing=True
+        label_smoothing=False
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  4,
+    'batch_size':                  2,
     'num_batches':                 256,
     'num_epochs':                  2000,
 

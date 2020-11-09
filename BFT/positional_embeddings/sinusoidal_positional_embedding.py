@@ -54,7 +54,7 @@ class SinusoidalPositionalEmbedding(BasePositionalEmbedding):
             self.num_channels, dim=1
         )
         pos_embedding = pos_embedding[:, :x.size(1), :]
-        pos_embedding = torch.repeat_interleave(pos_embedding, x.shape[0], dim=0)
+        pos_embedding = pos_embedding.repeat(x.shape[0], 1, 1)
 
         x = torch.cat([x, pos_embedding], dim=2)
         return self.dropout(x), h

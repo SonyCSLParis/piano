@@ -71,7 +71,7 @@ class LinearTransformerEncoder(nn.Module):
                  dim_feedforward,
                  recurrent
                  ):
-        super(LinearTransformerCausalEncoder, self).__init__()
+        super(LinearTransformerEncoder, self).__init__()
 
         query_dimension = d_model // n_heads
         dropout = 0.1
@@ -160,15 +160,15 @@ class LinearTransformerCausalDecoder(nn.Module):
                 final_normalization=True
             ).get()
 
-    def forward(self, source, target):
+    def forward(self, memory, target):
         """
         Here, transformer is non recurrent
         :param x: (batch_size, num_tokens, feature_dim)
         :return:
         """
-        triangular_mask = TriangularCausalMask(x.size(1), device=x.device)
+        triangular_mask = TriangularCausalMask(target.size(1), device=target.device)
         return self.transformer(x=target, 
-                                memory=source,
+                                memory=memory,
                                 x_mask=triangular_mask,
                                 memory_mask=None)
 

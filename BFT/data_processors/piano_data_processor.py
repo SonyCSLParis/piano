@@ -35,14 +35,18 @@ class PianoDataProcessor(DataProcessor):
 # TODO create general purpose SourceTargetDataProcessor
 class MaskedPianoEDDataProcessor(nn.Module):
     def __init__(self, embedding_size, num_events, num_tokens_per_channel):
+        super().__init__()
+        self.embedding_size_source = embedding_size
+        self.embedding_size_target = embedding_size
+        
         self.encoder_data_processor = PianoDataProcessor(
-            embedding_size=embedding_size,
+            embedding_size=self.embedding_size_source,
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel,
             add_mask_token=True)
 
         self.decoder_data_processor = PianoDataProcessor(
-            embedding_size=embedding_size,
+            embedding_size=self.embedding_size_target,
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel,
             add_mask_token=False)
@@ -81,7 +85,7 @@ class MaskedPianoEDDataProcessor(nn.Module):
         """
         if masked_positions is None:
             p = random.random() * 0.5
-            masked_positions = torch.rand_like(x) < p
+            masked_positions = (torch.rand_like(x.float()) < p).long()
         
         batch_size, num_events, num_channels = x.size()
         mask_symbols = self.mask_symbols.unsqueeze(0).unsqueeze(0).repeat(
@@ -99,7 +103,8 @@ class MaskedPianoEDDataProcessor(nn.Module):
         :return:
         """
         source = cuda_variable(x.long())
-        target = self._mask_source(source)
+        target = cuda_variable(x.long())
+        source = self._mask_source(source)
         return source, target
 
     def embed_source(self, x):

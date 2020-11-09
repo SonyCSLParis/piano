@@ -54,19 +54,26 @@ class EncoderDecoder(nn.Module):
         
         self.num_channels_target = num_channels_target
         self.num_channels_source = num_channels_source
-        
-        self.num_tokens_target = self.data_processor.num_tokens
 
         ######################################################
-        # Embeddings
+        # Positional Embeddings
+        
         self.positional_embedding_source = positional_embedding_source
         self.positional_embedding_target = positional_embedding_target
-        positional_embedding_target_size = self.target_positional_embedding.positional_embedding_size
         
-        linear_target_input_size = self.d_model - positional_embedding_size
+        assert d_model_encoder == d_model_decoder
+        self.d_model = d_model_encoder
+        
+        self.linear_source = nn.Linear(
+            self.data_processor.embedding_size_source 
+            + self.positional_embedding_source.positional_embedding_size,
+            self.d_model
+        )
+        
         self.linear_target = nn.Linear(
-            self.data_processor.embedding_size,
-            linear_target_input_size
+            self.data_processor.embedding_size_target 
+            + self.positional_embedding_target.positional_embedding_size,
+            self.d_model
         )
 
         ########################################################
@@ -95,36 +102,43 @@ class EncoderDecoder(nn.Module):
         ######################################################
         # Output dimension adjustment
         self.pre_softmaxes = nn.ModuleList([nn.Linear(self.d_model, num_tokens_of_channel)
-                                            for num_tokens_of_channel in self.num_tokens_per_channel
+                                            for num_tokens_of_channel in self.data_processor.decoder_data_processor.num_tokens_per_channel
                                             ]
                                            )
         
     def __repr__(self) -> str:
-        return 'LinearTransformerDecoder'
+        return 'LinearTransformerEncoderDecoder'
 
     def forward(self, source, target, h_pe_init=None):
         """
-        :param target: sequence of tokens (batch_size, num_events, num_channels)
+        :param source: sequence of tokens (batch_size, num_events_source, num_channels_source)
+        :param target: sequence of tokens (batch_size, num_events_target, num_channels_target)
         :return:
         """
         batch_size, num_events_target, num_channels_target = target.size()
         batch_size, num_events_source, num_channels_source = source.size()
         
+        # --- Source
+        source_embedded = self.data_processor.embed_source(source)
         
-
-        target = self.data_processor.preprocess(target)
+        # add positional embeddings and flatten and to d_model
+        source_seq = flatten(source_embedded)
+        source_seq, h_pe_source = self.positional_embedding_source(source_seq, i=0, h=h_pe_init, target=source)        
+        source_seq = self.linear_source(source_seq)
         
-        target_embedded = self.data_processor.embed(target)
-        target_embedded = self.linear_target(target_embedded)
-        target_seq = flatten(target_embedded)
-
-
+        # encode
+        memory = self.encoder(source_seq)
+        
+        # --- Target
+        target_embedded = self.data_processor.embed_target(target)
+        
         # add positional embeddings
-        target_seq, h_pe = self.target_positional_embedding(target_seq, i=0, h=h_pe_init, target=target)
+        target_seq = flatten(target_embedded)
+        target_seq, h_pe_target = self.positional_embedding_target(target_seq, i=0, h=h_pe_init, target=target)
+        target_seq = self.linear_target(target_seq)
 
         # shift target_seq by one
         # Pad
-
         dummy_input_target = self.sos_target.repeat(batch_size, 1, 1)
         target_seq = torch.cat(
             [
@@ -134,8 +148,9 @@ class EncoderDecoder(nn.Module):
             dim=1)
         target_seq = target_seq[:, :-1]
 
-        output = self.transformer(
-            target_seq
+        output = self.decoder(
+            memory=memory,
+            target=target_seq
         )
 
         output = output.view(batch_size,
@@ -158,7 +173,7 @@ class EncoderDecoder(nn.Module):
         loss = loss.mean()
         return {
             'loss':                 loss,
-            'h_pe':                 h_pe,
+            'h_pe_target':                 h_pe_target,
             'weights_per_category': weights_per_category,
             'monitored_quantities': {
                 'loss': loss.item()
@@ -174,6 +189,7 @@ class EncoderDecoder(nn.Module):
         :param h_pe:
         :return:
         """
+        # TODO
         # deal with the SOS token embedding
         if i == 0:
             target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]

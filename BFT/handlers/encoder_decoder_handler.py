@@ -15,13 +15,19 @@ import torch.distributed as dist
 
 class EncoderDecoderHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
-                 dataloader_generator: DataloaderGenerator,
-                 data_processor) -> None:
-        super().___init__(model=model,
-                          model_dir=model_dir,
-                          dataloader_generator=dataloader_generator,
-                          data_processor=data_processor)
-
+                 dataloader_generator: DataloaderGenerator) -> None:
+        super(EncoderDecoderHandler,
+              self).__init__(model=model,
+                             model_dir=model_dir,
+                             dataloader_generator=dataloader_generator)
+              
+    # ==== Wrappers
+    def forward(self, source, target, h_pe_init=None):
+        return self.model.forward(source, target, h_pe_init=h_pe_init)
+    
+    def forward_step(self, target, state, i, h_pe):
+        raise NotImplementedError
+        return self.model.module.forward_step(target, state, i, h_pe)
 
     # ==== Training methods
     def epoch(
@@ -42,20 +48,19 @@ class EncoderDecoderHandler(Handler):
         iterator = enumerate(islice(data_loader, num_batches))
         if is_main_process():
             iterator = tqdm(iterator, ncols=80)
-            
+
         for sample_id, tensor_dict in iterator:
 
             # ==========================
             with torch.no_grad():
                 x = tensor_dict['x']
                 source, target = self.data_processor.preprocess(x)
-                # TODO finish HERE
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
-            forward_pass = self.forward(
-                target=x,
-                h_pe_init=h_pe_init)
+            forward_pass = self.forward(source=source,
+                                        target=target,
+                                        h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
 
@@ -79,8 +84,9 @@ class EncoderDecoderHandler(Handler):
 
         # renormalize monitored quantities
         for key, value in means.items():
-            means[key] = all_reduce_scalar(value, average=True) / (sample_id + 1)
-        
+            means[key] = all_reduce_scalar(value,
+                                           average=True) / (sample_id + 1)
+
         # means = {
         #     key: all_reduce_scalar(value, average=True) / (sample_id + 1)
         #     for key, value in means.items()
