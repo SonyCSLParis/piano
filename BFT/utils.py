@@ -51,16 +51,6 @@ def dict_pretty_print(d, endstr='\n'):
             print(f'{key.capitalize()}: {value:.6}', end=endstr)
 
 
-def elbo(weights_per_voice, chorale, z_distribution, beta):
-    prior = Normal(torch.zeros_like(z_distribution.loc),
-                   torch.ones_like(z_distribution.scale))
-    kl = kl_divergence(z_distribution, prior).sum(1)
-
-    ce = categorical_crossentropy(weights_per_voice, chorale)
-    # TODO check signs
-    return -ce - beta * kl, ce, kl
-
-
 def chorale_accuracy(value, target):
     """
     :param value: list of (batch_size, chorale_length, num_notes)
