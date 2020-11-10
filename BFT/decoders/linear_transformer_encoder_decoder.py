@@ -192,7 +192,8 @@ class EncoderDecoder(nn.Module):
         # --- Target
         weights_per_category, h_pe_target = self.forward_memory_target(
             memory=memory,
-            target=target
+            target=target,
+            h_pe_init=h_pe_init
         )
 
         # we can change loss mask
