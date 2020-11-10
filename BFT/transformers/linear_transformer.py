@@ -238,7 +238,7 @@ class LinearTransformerCausalDecoder(nn.Module):
         :param state:
         :return: (output, state)
         """
-        # TODO 
+        # TODO(gaetan) not implemented
         raise NotImplementedError
         return self.transformer(x, state=state)
     

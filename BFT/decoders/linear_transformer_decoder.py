@@ -1,24 +1,12 @@
-from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
-from datetime import datetime
+from BFT.positional_embeddings import PositionalEmbedding
 
-
-from fast_transformers.masking import TriangularCausalMask
 from torch import nn
-import numpy as np
 
-from tqdm import tqdm
-
-from BFT.data_processors.data_processor import DataProcessor
+from BFT.data_processors import DataProcessor
 from BFT.dataloaders.dataloader import DataloaderGenerator
-from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
-from BFT.positional_embeddings.learnt_embeddings import LearntEmbeddings
-from BFT.positional_embeddings.recurrent_positional_embedding import RecurrentPositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
+
 from BFT.transformers.linear_transformer import LinearTransformerCausalEncoder
-from BFT.utils import flatten, categorical_crossentropy, dict_pretty_print, top_k_top_p_filtering, \
-    to_numpy, cuda_variable
-import os
+from BFT.utils import flatten, categorical_crossentropy
 import torch
 
 
@@ -36,7 +24,22 @@ class CausalEncoder(nn.Module):
                  dropout,
                  label_smoothing,
                  recurrent=False):
-        # TODO Signature
+        """CausalEncoder with linear attention trained on a next-character prediction task
+
+        Args:
+            data_processor (DataProcessor): 
+            dataloader_generator (DataloaderGenerator): 
+            positional_embedding (PositionalEmbedding): 
+            d_model (int): 
+            num_decoder_layers (int):
+            n_head (int):
+            dim_feedforward (int): 
+            num_channels_decoder ([int]):
+            num_events_decoder ([int]): 
+            dropout ([float]): 
+            label_smoothing ([bool]): 
+            recurrent (bool, optional): If True, uses a recurrent linear transformer encoder (usage is like an RNN) for inference. Use only forward_step() in this case. Otherwise, standard linear transformer used for training. Use only forward() in this case. Defaults to False.
+        """
         super(CausalEncoder, self).__init__()
         self.data_processor = data_processor
         # can be useful
@@ -86,7 +89,7 @@ class CausalEncoder(nn.Module):
                                            )
         
     def __repr__(self) -> str:
-        return 'LinearTransformerDecoder'
+        return 'CausalEncoder'
 
     def forward(self, target, h_pe_init=None):
         """

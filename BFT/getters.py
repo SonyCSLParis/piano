@@ -51,7 +51,7 @@ def get_source_target_data_processor(dataloader_generator, data_processor_type,
                           data_processor_kwargs):
 
     if data_processor_type == 'bach':
-        # TODO
+        # TODO not implemented
         raise NotImplementedError
     elif data_processor_type == 'masked_piano':
         num_events = dataloader_generator.dataset.sequence_size

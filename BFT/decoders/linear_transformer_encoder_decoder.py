@@ -1,9 +1,8 @@
 
 from BFT.positional_embeddings import PositionalEmbedding 
-
+from BFT.data_processors import SourceTargetDataProcessor
 from torch import nn
 
-from BFT.data_processors import DataProcessor
 from BFT.dataloaders import DataloaderGenerator
 
 from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDiagonalDecoder 
@@ -13,7 +12,7 @@ import torch
 
 class EncoderDecoder(nn.Module):
     def __init__(self,
-                 data_processor: DataProcessor,
+                 data_processor: SourceTargetDataProcessor,
                  dataloader_generator: DataloaderGenerator,
                  positional_embedding_source: PositionalEmbedding,
                  positional_embedding_target: PositionalEmbedding,
@@ -32,7 +31,32 @@ class EncoderDecoder(nn.Module):
                  dropout,
                  label_smoothing,
                  recurrent=False):
-        # TODO Signature
+        """EncoderDecoder with linear attention trained on a next-character prediction task
+        
+        AC/D/C model
+        For now, assumes num_tokens_source == num_tokens_target
+
+        Args:
+            data_processor (SourceTargetDataProcessor): 
+            dataloader_generator (DataloaderGenerator): 
+            positional_embedding_source (PositionalEmbedding): 
+            positional_embedding_target (PositionalEmbedding): 
+            d_model_encoder (int): 
+            d_model_decoder (int): 
+            num_layers_encoder (int): 
+            num_layers_decoder (int): 
+            n_head_encoder (int): 
+            n_head_decoder (int): 
+            dim_feedforward_encoder (int): 
+            dim_feedforward_decoder (int): 
+            num_channels_source (int): 
+            num_channels_target (int): 
+            num_events_source (int): 
+            num_events_target (int): 
+            dropout (float): 
+            label_smoothing (int): 
+            recurrent (bool, optional): If True, uses a recurrent linear transformer for the DECODER PART (usage is like an RNN) for inference. Use only forward_step() in this case. Otherwise, standard linear transformer used for training. Use only forward() in this case. Defaults to False.
+        """
         super(EncoderDecoder, self).__init__()
         self.data_processor = data_processor
         # can be useful
@@ -177,7 +201,7 @@ class EncoderDecoder(nn.Module):
         :param h_pe:
         :return:
         """
-        # TODO
+        # TODO(gaetan) not implemented
         # deal with the SOS token embedding
         if i == 0:
             target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]

@@ -96,11 +96,11 @@ class EncoderDecoderHandler(Handler):
     # ===== Generation methods
     def generate(self, temperature, batch_size=1, top_k=0, top_p=1.):
         assert self.recurrent
-        # TODO
+        # TODO(gaetan) write generate method
         self.eval()
         # num_events = 4 * 4 * 24
         # num_events = 240
-        # TODO hardcoded
+        
         num_events = 1024
 
         x = torch.zeros(batch_size, num_events,
