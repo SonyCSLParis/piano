@@ -1,4 +1,5 @@
-from fast_transformers.builders import TransformerEncoderBuilder, RecurrentEncoderBuilder, TransformerDecoderBuilder, RecurrentDecoderBuilder
+from fast_transformers.builders import TransformerEncoderBuilder, RecurrentEncoderBuilder, TransformerDecoderBuilder, RecurrentDecoderBuilder, TransformerDiagonalDecoderBuilder, RecurrentDiagonalDecoderBuilder
+
 from fast_transformers.masking import TriangularCausalMask
 
 from torch import nn
@@ -256,7 +257,7 @@ class LinearTransformerCausalDiagonalDecoder(nn.Module):
         dropout = 0.1
         attention_dropout = 0.1
         if not recurrent:
-            self.transformer = TransformerDecoderBuilder.from_kwargs(
+            self.transformer = TransformerDiagonalDecoderBuilder.from_kwargs(
                 n_layers=n_layers,
                 n_heads=n_heads,
                 query_dimensions=query_dimension,
@@ -269,7 +270,7 @@ class LinearTransformerCausalDiagonalDecoder(nn.Module):
                 final_normalization=True
             ).get()
         else:
-            self.transformer = RecurrentDecoderBuilder.from_kwargs(
+            self.transformer = RecurrentDiagonalDecoderBuilder.from_kwargs(
                 n_layers=n_layers,
                 n_heads=n_heads,
                 query_dimensions=query_dimension,
