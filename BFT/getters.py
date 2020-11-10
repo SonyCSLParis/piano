@@ -1,6 +1,6 @@
 from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding
 from BFT.data_processors import BachDataProcessor, MaskedPianoSourceTargetDataProcessor, PianoDataProcessor
-from BFT.dataloaders import BachDataloaderGenerator,  PianoDataloaderGenerator
+from BFT.dataloaders import BachDataloaderGenerator, PianoDataloaderGenerator
 
 from BFT.decoders.linear_transformer_decoder import CausalEncoder
 from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder

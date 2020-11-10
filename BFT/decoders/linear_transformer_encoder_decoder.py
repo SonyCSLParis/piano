@@ -1,5 +1,5 @@
 
-from BFT.positional_embeddings import PositionalEmbedding, 
+from BFT.positional_embeddings import PositionalEmbedding 
 
 from torch import nn
 
