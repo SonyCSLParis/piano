@@ -6,6 +6,7 @@ config = {
 
     # --- Dataloader ---
     'dataloader_generator_kwargs': dict(
+        # sequences_size=240,
         sequences_size=1024,
         transformations={
             'time_dilation':  True,
@@ -15,14 +16,29 @@ config = {
     ),  # Can be different from the encoder's data loader
 
     # --- DataProcessor ---
-    'data_processor_type':         'piano',  # can be used to filter out some channels
+    'data_processor_type':         'masked_piano',  # can be used to filter out some channels
     'data_processor_kwargs':       dict(
         embedding_size=32,
     ),  # Can be different from the encoder's data processor
 
     # --- Positional Embedding ---
-    'positional_embedding_dict': dict(
-        # 'channel_embedding': dict()
+    # WARNING:
+    # sinusoidal_elapsed_time_embedding makes no sense
+    # with bidirectionnal attention
+    
+    'positional_embedding_source_dict': dict(
+        sinusoidal_embedding= dict(
+            positional_embedding_size=128,
+            num_channels=4,
+            dropout=0.
+        ),
+        channel_embedding=dict(
+            positional_embedding_size=12,
+            num_channels=4
+        )
+    ),
+    
+    'positional_embedding_target_dict': dict(
         sinusoidal_embedding= dict(
             positional_embedding_size=128,
             num_channels=4,
@@ -40,18 +56,22 @@ config = {
     ),
         
     # --- Decoder ---
-    'decoder_type':                'linear_transformer',
-    'decoder_kwargs':              dict(
-        d_model=512,
-        n_head=8,
-        num_decoder_layers=8,
-        dim_feedforward=1024,
+    'encoder_decoder_type':                'linear_transformer',
+    'encoder_decoder_kwargs':              dict(
+        d_model_encoder=512,
+        d_model_decoder=512,
+        n_head_encoder=8,
+        n_head_decoder=8,
+        num_layers_encoder=4,
+        num_layers_decoder=8,
+        dim_feedforward_encoder=1024,
+        dim_feedforward_decoder=1024,
         dropout=0.1,
         label_smoothing=False
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  4,
+    'batch_size':                  2,
     'num_batches':                 256,
     'num_epochs':                  2000,
 

@@ -1,3 +1,4 @@
+from BFT.handlers.handler import Handler
 from torch.distributed.distributed_c10d import get_world_size
 from BFT.dataloaders.dataloader import DataloaderGenerator
 from BFT.utils import all_reduce_scalar, dict_pretty_print, display_monitored_quantities, is_main_process, to_numpy, top_k_top_p_filtering
@@ -12,81 +13,12 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 
 
-class DecoderHandler:
-    def __init__(self, decoder: DistributedDataParallel, model_dir: str,
+class DecoderHandler(Handler):
+    def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
-        self.decoder = decoder
-        self.model_dir = model_dir
-        self.dataloader_generator = dataloader_generator
-
-        # optim
-        self.optimizer = None
-        self.scheduler = None
-
-    def init_optimizers(self, lr=1e-3):
-        self.optimizer = torch.optim.Adam(list(self.parameters()), lr=lr)
-
-    # ==== Wrappers
-    def forward(self, target, h_pe_init=None):
-        return self.decoder.forward(target, h_pe_init=h_pe_init)
-    
-    def forward_step(self, target, state, i, h_pe):
-        return self.decoder.module.forward_step(target, state, i, h_pe)
-
-    def train(self):
-        self.decoder.train()
-
-    def eval(self):
-        self.decoder.eval()
-
-    def parameters(self):
-        return self.decoder.parameters()
-    
-    # expose useful attributes for generation
-    @property
-    def recurrent(self):
-        return self.decoder.module.recurrent
-    
-    @property
-    def num_tokens_per_channel(self):
-        return self.decoder.module.num_tokens_per_channel
-    
-    @property
-    def num_channels_target(self):
-        return self.decoder.module.num_channels_target
-
-    @property
-    def data_processor(self):
-        return self.decoder.module.data_processor
-
-    # ==== Save and Load methods
-    def __repr__(self):
-        return self.decoder.module.__repr__()
-
-    def save(self, early_stopped):
-        # Only save on process 0
-        if dist.get_rank() == 0:
-            # This saves also the encoder
-            if early_stopped:
-                model_dir = f'{self.model_dir}/early_stopped'
-            else:
-                model_dir = f'{self.model_dir}/overfitted'
-            if not os.path.exists(model_dir):
-                os.makedirs(model_dir)
-            torch.save(self.decoder.state_dict(), f'{model_dir}/decoder')
-        dist.barrier()
-
-    def load(self, early_stopped):
-        map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
-        print(f'Loading models {self.__repr__()}')
-        if early_stopped:
-            print('Load early stopped model')
-            model_dir = f'{self.model_dir}/early_stopped'
-        else:
-            print('Load over-fitted model')
-            model_dir = f'{self.model_dir}/overfitted'
-        self.decoder.load_state_dict(
-            torch.load(f'{model_dir}/decoder', map_location=map_location))
+        super().__init__(model=model,
+                          model_dir=model_dir,
+                          dataloader_generator=dataloader_generator)
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:
@@ -120,6 +52,7 @@ class DecoderHandler:
 
             # ==========================
             with torch.no_grad():
+                # TODO preprocess here
                 x = tensor_dict['x']
 
             # ========Train decoder =============
@@ -157,59 +90,6 @@ class DecoderHandler:
         #     for key, value in means.items()
         # }
         return means
-
-    def train_model(self,
-                    batch_size,
-                    num_batches=None,
-                    num_epochs=10,
-                    lr=1e-3,
-                    plot=False,
-                    num_workers=0,
-                    **kwargs):
-        if plot and is_main_process():
-            self.writer = SummaryWriter(f'{self.model_dir}')
-
-        best_val = 1e8
-        self.init_optimizers(lr=lr)
-        for epoch_id in range(num_epochs):
-            (generator_train, generator_val,
-             generator_test) = self.dataloader_generator.dataloaders(
-                 batch_size=batch_size,
-                 num_workers=num_workers,
-                 shuffle_val=True)
-
-            monitored_quantities_train = self.epoch(
-                data_loader=generator_train,
-                train=True,
-                num_batches=num_batches,
-            )
-            del generator_train
-
-            with torch.no_grad():
-                monitored_quantities_val = self.epoch(
-                    data_loader=generator_val,
-                    train=False,
-                    num_batches=num_batches //
-                    2 if num_batches is not None else None,
-                )
-                del generator_val
-            valid_loss = monitored_quantities_val['loss']
-            # self.scheduler.step(monitored_quantities_val["loss"])
-
-            display_monitored_quantities(
-                epoch_id=epoch_id,
-                monitored_quantities_train=monitored_quantities_train,
-                monitored_quantities_val=monitored_quantities_val)
-
-            self.save(early_stopped=False)
-
-            if valid_loss < best_val:
-                self.save(early_stopped=True)
-                best_val = valid_loss
-
-            if plot:
-                self.plot(epoch_id, monitored_quantities_train,
-                          monitored_quantities_val)
 
     # ===== Generation methods
     def generate_non_recurrent(self,

@@ -55,9 +55,11 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         pos_embedding = pe.repeat_interleave(
             self.num_channels, dim=1
         )
+        
+        pos_embedding = self.dropout(pos_embedding)
 
         x_embed = torch.cat([x_embed, pos_embedding], dim=2)
-        return self.dropout(x_embed), h
+        return x_embed, h
 
     def forward_step(self, x, i=0, h=None, target=None):
         # time_shift must be the last feature
@@ -81,6 +83,9 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         pe[:, 0::2] = torch.sin(elapsed_time * div_term)
         pe[:, 1::2] = torch.cos(elapsed_time * div_term)
         
+        
+        # dropout only on pe 
+        pe = self.dropout(pe)
         x_embed = torch.cat([x, pe], dim=1)
         
         # update h if the current token is a time_shift:
@@ -94,4 +99,4 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             elapsed_time = elapsed_time.squeeze(1)
             h = h + elapsed_time
         
-        return self.dropout(x_embed), h
+        return x_embed, h

@@ -1,8 +1,8 @@
 """
 @author: Gaetan Hadjeres
 """
-from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.handlers.decoder_handler import DecoderHandler
+from BFT.handlers import EncoderDecoderHandler
+from BFT.positional_embeddings import PositionalEmbedding
 import importlib
 import os
 import shutil
@@ -14,8 +14,7 @@ import torch
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from BFT.data_processors.data_processor import DataProcessor
-from BFT.getters import get_dataloader_generator, get_data_processor, get_decoder, get_positional_embedding
+from BFT.getters import get_dataloader_generator, get_source_target_data_processor, get_encoder_decoder, get_positional_embedding
 
 
 @click.command()
@@ -73,9 +72,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
-    # os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
-    os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -87,41 +85,47 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         dataloader_generator_kwargs=config['dataloader_generator_kwargs'])
 
     # data processor
-    data_processor: DataProcessor = get_data_processor(
+    data_processor = get_source_target_data_processor(
         dataloader_generator=dataloader_generator,
         data_processor_type=config['data_processor_type'],
         data_processor_kwargs=config['data_processor_kwargs'])
 
     # positional embedding
-    positional_embedding: PositionalEmbedding = get_positional_embedding(
+    positional_embedding_source: PositionalEmbedding = get_positional_embedding(
         dataloader_generator=dataloader_generator,
-        positional_embedding_dict=config['positional_embedding_dict']
-    )
-    decoder = get_decoder(data_processor=data_processor,
-                          dataloader_generator=dataloader_generator,
-                          positional_embedding=positional_embedding,
-                          decoder_type=config['decoder_type'],
-                          decoder_kwargs=config['decoder_kwargs'],
-                          training_phase=train)
+        positional_embedding_dict=config['positional_embedding_source_dict'])
+    positional_embedding_target: PositionalEmbedding = get_positional_embedding(
+        dataloader_generator=dataloader_generator,
+        positional_embedding_dict=config['positional_embedding_target_dict'])
+    encoder_decoder = get_encoder_decoder(
+        data_processor=data_processor,
+        dataloader_generator=dataloader_generator,
+        positional_embedding_source=positional_embedding_source,
+        positional_embedding_target=positional_embedding_target,
+        encoder_decoder_type=config['encoder_decoder_type'],
+        encoder_decoder_kwargs=config['encoder_decoder_kwargs'],
+        training_phase=train)
 
-    decoder.to(device)
-    decoder = DistributedDataParallel(module=decoder,
-                                        device_ids=[rank],
-                                        output_device=rank)
+    encoder_decoder.to(device)
+    encoder_decoder = DistributedDataParallel(module=encoder_decoder,
+                                      device_ids=[rank],
+                                      output_device=rank,
+                                    #   find_unused_parameters=True
+                                      )
 
-    decoder_handler = DecoderHandler(
-        model=decoder,
-        model_dir=model_dir,
-        dataloader_generator=dataloader_generator)
+    handler = EncoderDecoderHandler(model=encoder_decoder,
+                                     model_dir=model_dir,
+                                     dataloader_generator=dataloader_generator
+                                     )
 
     if load:
         if overfitted:
-            decoder_handler.load(early_stopped=False)
+            handler.load(early_stopped=False)
         else:
-            decoder_handler.load(early_stopped=True)
-            
+            handler.load(early_stopped=True)
+
     if train:
-        decoder_handler.train_model(
+        handler.train_model(
             batch_size=config['batch_size'],
             num_batches=config['num_batches'],
             num_epochs=config['num_epochs'],
@@ -137,15 +141,15 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #     top_p=0.9,
     #     top_k=0)
 
-    # scores = decoder_handler.generate_completion(num_completions=3,
+    # scores = handler.generate_completion(num_completions=3,
     #                                      temperature=1.,
     #                                      top_p=0.9,
     #                                      top_k=0,
     #                                      midi_file='inputs/Test_X_1.mid')
-    scores = decoder_handler.generate(temperature=0.95,
-                              batch_size=3,
-                              top_p=0.9,
-                              top_k=0)
+    scores = handler.generate(temperature=1.,
+                                      batch_size=3,
+                                      top_p=0.95,
+                                      top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/Denisova04.MID')

@@ -55,23 +55,16 @@ class ChannelEmbeddings(BasePositionalEmbedding):
         :param i:
         :return:
         """
-        # TODO can be done better
         batch_size, _ = x.size()
-        x = x.unsqueeze(1)
-        batch_size, num_tokens, _ = x.size()
-        # create init sequence
-        num_events = num_tokens // self.num_channels + 1
-        positional_embeddings = self.pe_0.repeat(batch_size, num_events, 1)
-        offset = i % self.num_channels
 
-        # slice so that we have the correct offset
-        positional_embeddings = positional_embeddings[:, offset: offset + num_tokens]
+        offset = i % self.num_channels
+        positional_embeddings = self.pe_0.repeat(batch_size, 1, 1)[:,offset]
+
 
         x = torch.cat([
             x, positional_embeddings
-        ], dim=2)
+        ], dim=1)
 
-        x = x[:, 0]
         return x, h
 
 
