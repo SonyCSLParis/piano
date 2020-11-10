@@ -121,27 +121,31 @@ class EncoderDecoder(nn.Module):
     def __repr__(self) -> str:
         return 'EncoderDecoder'
 
-    def forward(self, source, target, h_pe_init=None):
-        """
-        :param source: sequence of tokens (batch_size, num_events_source, num_channels_source)
-        :param target: sequence of tokens (batch_size, num_events_target, num_channels_target)
-        :return:
-        """
-        batch_size, num_events_target, num_channels_target = target.size()
-        batch_size, num_events_source, num_channels_source = source.size()
-        
-        # --- Source
+    def forward_source(self, source):
         source_embedded = self.data_processor.embed_source(source)
         
         # add positional embeddings and flatten and to d_model
         source_seq = flatten(source_embedded)
-        source_seq, h_pe_source = self.positional_embedding_source(source_seq, i=0, h=h_pe_init, target=source)        
+        # since Encoder is bidirectionnal, h is always None
+        source_seq, h_pe_source = self.positional_embedding_source(source_seq, i=0, h=None, target=source)        
         source_seq = self.linear_source(source_seq)
         
         # encode
         memory = self.encoder(source_seq)
-        
-        # --- Target
+        return memory
+    
+    def forward_memory_target(self, memory, target, h_pe_init=None):
+        """Call decoder on target conditionned on memory (output of the encoder)
+
+        Args:
+            memory (FloatTensor): (batch_size, num_tokens_source, d_model_encoder)
+            target (LongTensor): [description]
+            h_pe_init ([type], optional): [description]. Defaults to None.
+
+        Returns:
+            [type]: [description]
+        """
+        batch_size, num_events_target, num_channels_source = target.size()
         target_embedded = self.data_processor.embed_target(target)
         
         # add positional embeddings
@@ -173,6 +177,23 @@ class EncoderDecoder(nn.Module):
             pre_softmax(t[:, :, 0, :])
             for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
         ]
+        return weights_per_category, h_pe_target
+
+    def forward(self, source, target, h_pe_init=None):
+        """
+        :param source: sequence of tokens (batch_size, num_events_source, num_channels_source)
+        :param target: sequence of tokens (batch_size, num_events_target, num_channels_target)
+        :return: dict containing loss, output, and monitored_quantities
+        """
+
+        # --- Source
+        memory = self.forward_source(source)
+        
+        # --- Target
+        weights_per_category, h_pe_target = self.forward_memory_target(
+            memory=memory,
+            target=target
+        )
 
         # we can change loss mask
         loss = categorical_crossentropy(

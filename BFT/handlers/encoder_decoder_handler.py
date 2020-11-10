@@ -94,13 +94,25 @@ class EncoderDecoderHandler(Handler):
         return means
 
     # ===== Generation methods
-    def generate(self, temperature, batch_size=1, top_k=0, top_p=1.):
+    def generate(self, source, temperature, batch_size=1, top_k=0, top_p=1.):
+        """Generate using the EncoderDecoder conditionned on source
+
+        Args:
+            source (LongTensor): (batch_size, num_events_source, num_channels_source)
+            temperature ([type]): [description]
+            batch_size (int, optional): [description]. Defaults to 1.
+            top_k (int, optional): [description]. Defaults to 0.
+            top_p ([type], optional): [description]. Defaults to 1..
+
+        Returns:
+            [type]: [description]
+        """
         assert self.recurrent
+        
         # TODO(gaetan) write generate method
         self.eval()
-        # num_events = 4 * 4 * 24
-        # num_events = 240
-        
+
+        # TODO hard coded value
         num_events = 1024
 
         x = torch.zeros(batch_size, num_events,
