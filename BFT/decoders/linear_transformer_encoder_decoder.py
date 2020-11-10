@@ -214,16 +214,21 @@ class EncoderDecoder(nn.Module):
             }
         }
 
-    def forward_step(self, target, state, i, h_pe):
+    def forward_step(self, memory, target, state, i, h_pe):
         """
+        Recurrent version of forward_memory_target
+        Assumes memory is the output of the encoder
+        
+        i is the index of target that is to BE predicted:
         if i == 0, target is not used: SOS instead
+        
+        :param memory: (batch_size, num_tokens_source, d_model)
         :param target: sequence of tokens (batch_size,)
         :param state:
         :param i:
         :param h_pe:
         :return:
         """
-        # TODO(gaetan) not implemented
         # deal with the SOS token embedding
         if i == 0:
             target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]
@@ -240,9 +245,11 @@ class EncoderDecoder(nn.Module):
                 i=(i - 1),
                 h=h_pe,
                 target=target)
-
-        output, state = self.transformer.forward_step(
-            target_seq, state=state
+        # TODO(gaetan) check state with diagonal
+        output, state = self.decoder.forward_step(
+            memory=memory,
+            x=target_seq,
+            state=state
         )
 
         channel_index_output = i % self.num_channels_target
