@@ -1,8 +1,8 @@
 """
 @author: Gaetan Hadjeres
 """
-from BFT.handlers.encoder_decoder_handler import EncoderDecoderHandler
-from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
+from BFT.handlers import EncoderDecoderHandler
+from BFT.positional_embeddings import PositionalEmbedding
 import importlib
 import os
 import shutil
@@ -14,8 +14,7 @@ import torch
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from BFT.data_processors.data_processor import DataProcessor
-from BFT.getters import get_dataloader_generator, get_ED_data_processor, get_encoder_decoder, get_positional_embedding
+from BFT.getters import get_dataloader_generator, get_source_target_data_processor, get_encoder_decoder, get_positional_embedding
 
 
 @click.command()
@@ -86,7 +85,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         dataloader_generator_kwargs=config['dataloader_generator_kwargs'])
 
     # data processor
-    data_processor = get_ED_data_processor(
+    data_processor = get_source_target_data_processor(
         dataloader_generator=dataloader_generator,
         data_processor_type=config['data_processor_type'],
         data_processor_kwargs=config['data_processor_kwargs'])

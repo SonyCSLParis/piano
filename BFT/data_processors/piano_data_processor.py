@@ -1,10 +1,9 @@
-import numpy as np
+from .source_target_data_processor import SourceTargetDataProcessor
+from .data_processor import DataProcessor
 import torch
 import random
 from torch import nn
 from BFT.utils import cuda_variable
-
-from BFT.data_processors.data_processor import DataProcessor
 
 
 class PianoDataProcessor(DataProcessor):
@@ -31,47 +30,32 @@ class PianoDataProcessor(DataProcessor):
         else:
             return reconstruction
 
-
-# TODO create general purpose SourceTargetDataProcessor
-class MaskedPianoEDDataProcessor(nn.Module):
+class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
     def __init__(self, embedding_size, num_events, num_tokens_per_channel):
-        super().__init__()
-        self.embedding_size_source = embedding_size
-        self.embedding_size_target = embedding_size
         
-        self.encoder_data_processor = PianoDataProcessor(
-            embedding_size=self.embedding_size_source,
+        
+        encoder_data_processor = PianoDataProcessor(
+            embedding_size=embedding_size,
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel,
             add_mask_token=True)
 
-        self.decoder_data_processor = PianoDataProcessor(
-            embedding_size=self.embedding_size_target,
+        decoder_data_processor = PianoDataProcessor(
+            embedding_size=embedding_size,
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel,
             add_mask_token=False)
+        
+        super(MaskedPianoSourceTargetDataProcessor, self).__init__(
+            encoder_data_processor=encoder_data_processor,
+            decoder_data_processor=decoder_data_processor
+            )
         
         # (num_channels, ) LongTensor
         self.mask_symbols = nn.Parameter(
             torch.LongTensor(self.encoder_data_processor.num_tokens_per_channel),
             requires_grad=False
         )
-        
-    @property
-    def num_channels_source(self):
-        return self.encoder_data_processor.num_channels
-    
-    @property
-    def num_channels_target(self):
-        return self.decoder_data_processor.num_channels
-    
-    @property
-    def num_events_source(self):
-        return self.encoder_data_processor.num_events
-    
-    @property
-    def num_events_target(self):
-        return self.decoder_data_processor.num_events 
 
     def _mask_source(self, x, masked_positions=None):
         """Add a MASK symbol
@@ -106,33 +90,3 @@ class MaskedPianoEDDataProcessor(nn.Module):
         target = cuda_variable(x.long())
         source = self._mask_source(source)
         return source, target
-
-    def embed_source(self, x):
-        """
-        :param x: (..., num_channels)
-        :return: (..., num_channels, embedding_size)
-        """
-        return self.encoder_data_processor.embed(x)
-
-    def embed_target(self, x):
-        """
-        :param x: (..., num_channels)
-        :return: (..., num_channels, embedding_size)
-        """
-        return self.decoder_data_processor.embed(x)
-
-    def embed_step_source(self, x, channel_index):
-        """
-        :param x: (..., num_channels)
-        :return: (..., num_channels, embedding_size)
-        """
-        return self.encoder_data_processor.embed_step(
-            x, channel_index=channel_index)
-
-    def embed_step_target(self, x, channel_index):
-        """
-        :param x: (..., num_channels)
-        :return: (..., num_channels, embedding_size)
-        """
-        return self.decoder_data_processor.embed_step(
-            x, channel_index=channel_index)

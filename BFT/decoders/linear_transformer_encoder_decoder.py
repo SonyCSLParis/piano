@@ -1,25 +1,13 @@
 
-from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
-from datetime import datetime
+from BFT.positional_embeddings import PositionalEmbedding, 
 
-
-from fast_transformers.masking import TriangularCausalMask
 from torch import nn
-import numpy as np
 
-from tqdm import tqdm
+from BFT.data_processors import DataProcessor
+from BFT.dataloaders import DataloaderGenerator
 
-from BFT.data_processors.data_processor import DataProcessor
-from BFT.dataloaders.dataloader import DataloaderGenerator
-from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
-from BFT.positional_embeddings.learnt_embeddings import LearntEmbeddings
-from BFT.positional_embeddings.recurrent_positional_embedding import RecurrentPositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
-from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDecoder, LinearTransformerCausalDiagonalDecoder, LinearTransformerCausalEncoder, LinearTransformerEncoder
-from BFT.utils import flatten, categorical_crossentropy, dict_pretty_print, top_k_top_p_filtering, \
-    to_numpy, cuda_variable
-import os
+from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDiagonalDecoder 
+from BFT.utils import flatten, categorical_crossentropy
 import torch
 
 
@@ -107,7 +95,7 @@ class EncoderDecoder(nn.Module):
                                            )
         
     def __repr__(self) -> str:
-        return 'LinearTransformerEncoderDecoder'
+        return 'EncoderDecoder'
 
     def forward(self, source, target, h_pe_init=None):
         """

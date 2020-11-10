@@ -1,15 +1,9 @@
-from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder
-from BFT.positional_embeddings.channel_embeddings import ChannelEmbeddings
-from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding, PositionalEmbedding
-from BFT.positional_embeddings.sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
-from BFT.positional_embeddings.sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
-from BFT.data_processors.bach_data_processor import BachDataProcessor
-from BFT.data_processors.piano_data_processor import MaskedPianoEDDataProcessor, PianoDataProcessor
-from BFT.dataloaders.bach_dataloader import BachDataloaderGenerator
-import numpy as np
+from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding
+from BFT.data_processors import BachDataProcessor, MaskedPianoSourceTargetDataProcessor, PianoDataProcessor
+from BFT.dataloaders import BachDataloaderGenerator,  PianoDataloaderGenerator
 
-from BFT.dataloaders.piano_dataloader import PianoDataloaderGenerator
 from BFT.decoders.linear_transformer_decoder import CausalEncoder
+from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder
 
 
 def get_dataloader_generator(dataset, dataloader_generator_kwargs):
@@ -53,7 +47,7 @@ def get_data_processor(dataloader_generator, data_processor_type,
     return data_processor
 
 
-def get_ED_data_processor(dataloader_generator, data_processor_type,
+def get_source_target_data_processor(dataloader_generator, data_processor_type,
                           data_processor_kwargs):
 
     if data_processor_type == 'bach':
@@ -66,7 +60,7 @@ def get_ED_data_processor(dataloader_generator, data_processor_type,
             len(value2index[feature])
             for feature in dataloader_generator.features
         ]
-        data_processor = MaskedPianoEDDataProcessor(
+        data_processor = MaskedPianoSourceTargetDataProcessor(
             embedding_size=data_processor_kwargs['embedding_size'],
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel)
