@@ -26,7 +26,7 @@ class SinusoidalPositionalEmbedding(BasePositionalEmbedding):
         self.pe = nn.Parameter(self.pe.unsqueeze(0), requires_grad=False)
 
 
-    def forward(self, x, i=0, h=None, target=None):
+    def forward(self, x, i=0, h=None, metadata_dict={}):
         assert i == 0
         pos_embedding = self.pe.repeat_interleave(
             self.num_channels, dim=1
@@ -37,7 +37,7 @@ class SinusoidalPositionalEmbedding(BasePositionalEmbedding):
         x = torch.cat([x, pos_embedding], dim=2)
         return self.dropout(x), h
 
-    def forward_step(self, x, i=0, h=None, target=None):
+    def forward_step(self, x, i=0, h=None, metadata_dict={}):
         pe_index = i // self.num_channels
         pos_embedding = self.pe[:, pe_index].repeat(x.size(0), 1)
 

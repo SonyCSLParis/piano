@@ -22,14 +22,14 @@ class EncoderDecoderHandler(Handler):
                              dataloader_generator=dataloader_generator)
               
     # ==== Wrappers
-    def forward(self, source, target, h_pe_init=None):
-        return self.model.forward(source, target, h_pe_init=h_pe_init)
+    def forward(self, source, target, metadata_dict, h_pe_init=None):
+        return self.model.forward(source, target, metadata_dict=metadata_dict, h_pe_init=h_pe_init)
     
-    def forward_step(self, memory, target, state, i, h_pe):
-        return self.model.module.forward_step(memory, target, state, i, h_pe)
+    def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
+        return self.model.module.forward_step(memory, target, metadata_dict, state, i, h_pe)
     
-    def forward_source(self, source):
-        return self.model.module.forward_source(source)
+    def forward_source(self, source, metadata_dict):
+        return self.model.module.forward_source(source, metadata_dict)
 
     # ==== Training methods
     def epoch(
@@ -56,12 +56,13 @@ class EncoderDecoderHandler(Handler):
             # ==========================
             with torch.no_grad():
                 x = tensor_dict['x']
-                source, target = self.data_processor.preprocess(x)
+                source, target, metadata_dict = self.data_processor.preprocess(x)
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
             forward_pass = self.forward(source=source,
                                         target=target,
+                                        metadata_dict=metadata_dict,
                                         h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
