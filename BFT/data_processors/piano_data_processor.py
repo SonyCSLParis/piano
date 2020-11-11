@@ -69,24 +69,29 @@ class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
         """
         if masked_positions is None:
             p = random.random() * 0.5
-            masked_positions = (torch.rand_like(x.float()) < p).long()
+            masked_positions = (torch.rand_like(x.float()) > p).long()
         
         batch_size, num_events, num_channels = x.size()
         mask_symbols = self.mask_symbols.unsqueeze(0).unsqueeze(0).repeat(
             batch_size, num_events, 1
         )
-                
-        return (
+        masked_x = (
             x * (1 - masked_positions) + masked_positions * mask_symbols
         )
+        return masked_x, masked_positions
 
     def preprocess(self, x):
         """
-        :param x: ? -> tuple source, target of size (batch_size, num_events_source, num_channels_source)
-        (batch_size, num_events_target, num_channels_target)
-        :return:
+        :param x: ? 
+        :return: tuple source, target, metadata_dict where 
+        - source is (batch_size, num_events_source, num_channels_source)
+        - target is (batch_size, num_events_target, num_channels_target)
+        - metadata_dict is a dictionnary which contains the masked_positions tensor of size (batch_size, num_events_source, num_channels_source)    
         """
         source = cuda_variable(x.long())
         target = cuda_variable(x.long())
-        source = self._mask_source(source)
-        return source, target
+        source, masked_positions = self._mask_source(source)
+        metadata_dict = dict(
+            masked_positions=masked_positions
+            )
+        return source, target, metadata_dict

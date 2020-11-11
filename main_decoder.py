@@ -142,9 +142,9 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #                                      top_p=0.9,
     #                                      top_k=0,
     #                                      midi_file='inputs/Test_X_1.mid')
-    scores = decoder_handler.generate(temperature=0.95,
+    scores = decoder_handler.generate(temperature=1.,
                               batch_size=3,
-                              top_p=0.9,
+                              top_p=0.95,
                               top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')

@@ -231,16 +231,17 @@ class LinearTransformerCausalDecoder(nn.Module):
                                 x_mask=triangular_mask,
                                 memory_mask=None)
 
-    def forward_step(self, x, state):
+    def forward_step(self, memory, x, state):
         """
         Here, transformer is recurrent
         :param x: (batch_size, feature_dim)
         :param state:
         :return: (output, state)
         """
-        # TODO(gaetan) not implemented
-        raise NotImplementedError
-        return self.transformer(x, state=state)
+
+        return self.transformer(x=x,
+                                memory=memory,
+                                state=state)
     
     
 class LinearTransformerCausalDiagonalDecoder(nn.Module):
@@ -295,13 +296,14 @@ class LinearTransformerCausalDiagonalDecoder(nn.Module):
                                 x_mask=triangular_mask,
                                 memory_mask=None)
 
-    def forward_step(self, x, state):
+    def forward_step(self, memory, x, state):
         """
         Here, transformer is recurrent
         :param x: (batch_size, feature_dim)
         :param state:
         :return: (output, state)
         """
-        # TODO 
-        raise NotImplementedError
-        return self.transformer(x, state=state)
+
+        return self.transformer(x=x,
+                                memory=memory,
+                                state=state)

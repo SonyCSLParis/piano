@@ -1,11 +1,11 @@
-
-from BFT.positional_embeddings import PositionalEmbedding 
+from DatasetManager.metadata import Metadata
+from BFT.positional_embeddings import PositionalEmbedding
 from BFT.data_processors import SourceTargetDataProcessor
 from torch import nn
 
 from BFT.dataloaders import DataloaderGenerator
 
-from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDiagonalDecoder 
+from BFT.transformers.linear_transformer import LinearTransformerAnticausalEncoder, LinearTransformerCausalDiagonalDecoder
 from BFT.utils import flatten, categorical_crossentropy
 import torch
 
@@ -63,30 +63,28 @@ class EncoderDecoder(nn.Module):
         self.dataloader_generator = dataloader_generator
 
         # Compute num_tokens for source and target
-        
+
         self.num_channels_target = num_channels_target
         self.num_channels_source = num_channels_source
 
         ######################################################
         # Positional Embeddings
-        
+
         self.positional_embedding_source = positional_embedding_source
         self.positional_embedding_target = positional_embedding_target
-        
+
         assert d_model_encoder == d_model_decoder
         self.d_model = d_model_encoder
-        
+
         self.linear_source = nn.Linear(
-            self.data_processor.embedding_size_source 
-            + self.positional_embedding_source.positional_embedding_size,
-            self.d_model
-        )
-        
+            self.data_processor.embedding_size_source +
+            self.positional_embedding_source.positional_embedding_size,
+            self.d_model)
+
         self.linear_target = nn.Linear(
-            self.data_processor.embedding_size_target 
-            + self.positional_embedding_target.positional_embedding_size,
-            self.d_model
-        )
+            self.data_processor.embedding_size_target +
+            self.positional_embedding_target.positional_embedding_size,
+            self.d_model)
 
         ########################################################
         # Start of sentence
@@ -98,110 +96,135 @@ class EncoderDecoder(nn.Module):
             n_heads=n_head_encoder,
             n_layers=num_layers_encoder,
             dim_feedforward=dim_feedforward_encoder,
-            recurrent=recurrent
-        )
-        
+            recurrent=recurrent)
+
         self.decoder = LinearTransformerCausalDiagonalDecoder(
             d_model=d_model_decoder,
             n_heads=n_head_decoder,
             n_layers=num_layers_decoder,
             dim_feedforward=dim_feedforward_decoder,
-            recurrent=recurrent
-        )
+            recurrent=recurrent)
         self.label_smoothing = label_smoothing
         self.recurrent = recurrent
-        
+
         ######################################################
         # Output dimension adjustment
-        self.pre_softmaxes = nn.ModuleList([nn.Linear(self.d_model, num_tokens_of_channel)
-                                            for num_tokens_of_channel in self.data_processor.decoder_data_processor.num_tokens_per_channel
-                                            ]
-                                           )
-        
+        self.pre_softmaxes = nn.ModuleList([
+            nn.Linear(self.d_model, num_tokens_of_channel)
+            for num_tokens_of_channel in
+            self.data_processor.decoder_data_processor.num_tokens_per_channel
+        ])
+
     def __repr__(self) -> str:
         return 'EncoderDecoder'
 
-    def forward(self, source, target, h_pe_init=None):
-        """
-        :param source: sequence of tokens (batch_size, num_events_source, num_channels_source)
-        :param target: sequence of tokens (batch_size, num_events_target, num_channels_target)
-        :return:
-        """
-        batch_size, num_events_target, num_channels_target = target.size()
-        batch_size, num_events_source, num_channels_source = source.size()
-        
-        # --- Source
+    def forward_source(self, source, metadata_dict):
         source_embedded = self.data_processor.embed_source(source)
-        
+
         # add positional embeddings and flatten and to d_model
         source_seq = flatten(source_embedded)
-        source_seq, h_pe_source = self.positional_embedding_source(source_seq, i=0, h=h_pe_init, target=source)        
+
+        metadata_dict['original_sequence'] = source
+        # since Encoder is bidirectionnal, h is always None
+        source_seq, h_pe_source = self.positional_embedding_source(
+            source_seq, metadata_dict=metadata_dict, i=0, h=None)
         source_seq = self.linear_source(source_seq)
-        
+
         # encode
         memory = self.encoder(source_seq)
-        
-        # --- Target
+        return memory
+
+    def forward_memory_target(self,
+                              memory,
+                              target,
+                              metadata_dict,
+                              h_pe_init=None):
+        """Call decoder on target conditionned on memory (output of the encoder)
+
+        Args:
+            memory (FloatTensor): (batch_size, num_tokens_source, d_model_encoder)
+            target (LongTensor): [description]
+            h_pe_init ([type], optional): [description]. Defaults to None.
+
+        Returns:
+            [type]: [description]
+        """
+        batch_size, num_events_target, num_channels_source = target.size()
         target_embedded = self.data_processor.embed_target(target)
-        
+
+        metadata_dict['original_sequence'] = target
         # add positional embeddings
         target_seq = flatten(target_embedded)
-        target_seq, h_pe_target = self.positional_embedding_target(target_seq, i=0, h=h_pe_init, target=target)
+        target_seq, h_pe_target = self.positional_embedding_target(
+            target_seq, i=0, h=h_pe_init, metadata_dict=metadata_dict)
         target_seq = self.linear_target(target_seq)
 
         # shift target_seq by one
         # Pad
         dummy_input_target = self.sos_target.repeat(batch_size, 1, 1)
-        target_seq = torch.cat(
-            [
-                dummy_input_target,
-                target_seq
-            ],
-            dim=1)
+        target_seq = torch.cat([dummy_input_target, target_seq], dim=1)
         target_seq = target_seq[:, :-1]
 
-        output = self.decoder(
-            memory=memory,
-            target=target_seq
-        )
+        output = self.decoder(memory=memory, target=target_seq)
 
-        output = output.view(batch_size,
-                             -1,
-                             self.num_channels_target,
+        output = output.view(batch_size, -1, self.num_channels_target,
                              self.d_model)
         weights_per_category = [
             pre_softmax(t[:, :, 0, :])
             for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
         ]
+        return weights_per_category, h_pe_target
+
+    def forward(self, source, target, metadata_dict, h_pe_init=None):
+        """
+        :param source: sequence of tokens (batch_size, num_events_source, num_channels_source)
+        :param target: sequence of tokens (batch_size, num_events_target, num_channels_target)
+        :param metadata_dict: dictionnary of tensors
+        :return: dict containing loss, output, and monitored_quantities
+        """
+
+        # --- Source
+        memory = self.forward_source(source, metadata_dict)
+
+        # --- Target
+        weights_per_category, h_pe_target = self.forward_memory_target(
+            memory=memory,
+            target=target,
+            metadata_dict=metadata_dict,
+            h_pe_init=h_pe_init)
 
         # we can change loss mask
-        loss = categorical_crossentropy(
-            value=weights_per_category,
-            target=target,
-            mask=torch.ones_like(target),
-            label_smoothing=self.label_smoothing
-        )
+        loss = categorical_crossentropy(value=weights_per_category,
+                                        target=target,
+                                        mask=torch.ones_like(target),
+                                        label_smoothing=self.label_smoothing)
 
         loss = loss.mean()
         return {
-            'loss':                 loss,
-            'h_pe_target':                 h_pe_target,
+            'loss': loss,
+            'h_pe_target': h_pe_target,
             'weights_per_category': weights_per_category,
             'monitored_quantities': {
                 'loss': loss.item()
             }
         }
 
-    def forward_step(self, target, state, i, h_pe):
+    def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
         """
+        Recurrent version of forward_memory_target
+        Assumes memory is the output of the encoder
+        
+        i is the index of target that is to BE predicted:
         if i == 0, target is not used: SOS instead
+        
+        :param memory: (batch_size, num_tokens_source, d_model)
         :param target: sequence of tokens (batch_size,)
         :param state:
         :param i:
         :param h_pe:
         :return:
         """
-        # TODO(gaetan) not implemented
+        # TODO(gaetan) write SOS class which uses metadata_dict
         # deal with the SOS token embedding
         if i == 0:
             target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]
@@ -209,19 +232,19 @@ class EncoderDecoder(nn.Module):
             channel_index_input = (i - 1) % self.num_channels_target
             target = self.data_processor.preprocess(target)
             target_embedded = self.data_processor.embed_step(
-                target,
-                channel_index=channel_index_input)
+                target, channel_index=channel_index_input)
             target_embedded = self.linear_target(target_embedded)
             # add positional embeddings
+            metadata_dict['original_sequence'] = target
             target_seq, h_pe = self.target_positional_embedding.forward_step(
                 target_embedded,
                 i=(i - 1),
                 h=h_pe,
-                target=target)
-
-        output, state = self.transformer.forward_step(
-            target_seq, state=state
-        )
+                metadata_dict=metadata_dict)
+        # TODO(gaetan) check state with diagonal
+        output, state = self.decoder.forward_step(memory=memory,
+                                                  x=target_seq,
+                                                  state=state)
 
         channel_index_output = i % self.num_channels_target
 
@@ -229,9 +252,8 @@ class EncoderDecoder(nn.Module):
 
         # no need for a loss
         return {
-            'loss':    None,
-            'state':   state,
-            'h_pe':    h_pe,
+            'loss': None,
+            'state': state,
+            'h_pe': h_pe,
             'weights': weights,
         }
-

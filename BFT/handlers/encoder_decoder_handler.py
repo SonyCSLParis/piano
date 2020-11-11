@@ -22,12 +22,14 @@ class EncoderDecoderHandler(Handler):
                              dataloader_generator=dataloader_generator)
               
     # ==== Wrappers
-    def forward(self, source, target, h_pe_init=None):
-        return self.model.forward(source, target, h_pe_init=h_pe_init)
+    def forward(self, source, target, metadata_dict, h_pe_init=None):
+        return self.model.forward(source, target, metadata_dict=metadata_dict, h_pe_init=h_pe_init)
     
-    def forward_step(self, target, state, i, h_pe):
-        raise NotImplementedError
-        return self.model.module.forward_step(target, state, i, h_pe)
+    def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
+        return self.model.module.forward_step(memory, target, metadata_dict, state, i, h_pe)
+    
+    def forward_source(self, source, metadata_dict):
+        return self.model.module.forward_source(source, metadata_dict)
 
     # ==== Training methods
     def epoch(
@@ -54,12 +56,13 @@ class EncoderDecoderHandler(Handler):
             # ==========================
             with torch.no_grad():
                 x = tensor_dict['x']
-                source, target = self.data_processor.preprocess(x)
+                source, target, metadata_dict = self.data_processor.preprocess(x)
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
             forward_pass = self.forward(source=source,
                                         target=target,
+                                        metadata_dict=metadata_dict,
                                         h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
@@ -94,13 +97,23 @@ class EncoderDecoderHandler(Handler):
         return means
 
     # ===== Generation methods
-    def generate(self, temperature, batch_size=1, top_k=0, top_p=1.):
+    def generate(self, source, temperature, batch_size=1, top_k=0, top_p=1.):
+        """Generate using the EncoderDecoder conditionned on source
+
+        Args:
+            source (LongTensor): (batch_size, num_events_source, num_channels_source)
+            temperature ([type]): [description]
+            batch_size (int, optional): [description]. Defaults to 1.
+            top_k (int, optional): [description]. Defaults to 0.
+            top_p ([type], optional): [description]. Defaults to 1..
+
+        Returns:
+            [type]: [description]
+        """
         assert self.recurrent
-        # TODO(gaetan) write generate method
         self.eval()
-        # num_events = 4 * 4 * 24
-        # num_events = 240
-        
+
+        # TODO hard coded value
         num_events = 1024
 
         x = torch.zeros(batch_size, num_events,
@@ -111,28 +124,23 @@ class EncoderDecoderHandler(Handler):
             xi = torch.zeros_like(x)[:, 0, 0]
             state = None
             h_pe = None
+            
+            # compute memory only once
+            memory = self.forward_source(source)
 
             # i corresponds to the position of the token BEING generated
             for event_index in range(num_events):
                 for channel_index in range(self.num_channels_target):
                     i = event_index * self.num_channels_target + channel_index
 
-                    forward_pass = self.forward_step(xi,
+                    forward_pass = self.forward_step(memory=memory,
+                                                     target=xi,
                                                      state=state,
                                                      i=i,
                                                      h_pe=h_pe)
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
-
-                    # # Removing these lines make the method applicable to all datasets
-                    # TODO separate method in dataprocessor?
-                    # # exclude non note symbols:
-                    # exclude_symbols = ['START', 'END', 'XX']
-                    # for sym in exclude_symbols:
-                    #     sym_index = self.dataloader_generator.dataset.note2index_dicts[
-                    #         channel_index][sym]
-                    #     logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
                     for logit in logits:

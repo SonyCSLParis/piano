@@ -16,12 +16,14 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
 
         
 
-    def forward(self, x_embed, i=0, h=None, target=None):
+    def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         assert i == 0
         if h is None:
             h = torch.zeros_like(x_embed[:, 0, 0])
-            
-        x = target
+        assert 'original_sequence' in metadata_dict, (
+            'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
+        )
+        x = metadata_dict['original_sequence']
         batch_size, num_events, num_channels = x.size()
         # batch_size, num_tokens, embedding_dim = x_embed.size()
         elapsed_time = self.dataloader_generator.get_elapsed_time(
@@ -61,9 +63,13 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         x_embed = torch.cat([x_embed, pos_embedding], dim=2)
         return x_embed, h
 
-    def forward_step(self, x, i=0, h=None, target=None):
+    def forward_step(self, x, i=0, h=None, metadata_dict={}):
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
+        
+        assert 'original_sequence' in metadata_dict, (
+            'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
+        )
         
         batch_size = x.size(0)
         # h represents the elapsed time
@@ -91,6 +97,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         # update h if the current token is a time_shift:
         if i % self.num_channels == self.num_channels - 1:
             # add fake features so that we can call get_elapsed_time
+            target = metadata_dict['original_sequence']
             target = target.unsqueeze(1).unsqueeze(1)
             target = target.repeat(1, 1, self.num_channels)
             elapsed_time = self.dataloader_generator.get_elapsed_time(

@@ -18,7 +18,7 @@ class ChannelEmbeddings(BasePositionalEmbedding):
             )
         )
 
-    def forward(self, x, i=0, h=None, target=None):
+    def forward(self, x, i=0, h=None, metadata_dict={}):
         """
 
         :param x: (
@@ -45,7 +45,7 @@ class ChannelEmbeddings(BasePositionalEmbedding):
 
         return x, h
 
-    def forward_step(self, x, i=0, h=None, target=None):
+    def forward_step(self, x, i=0, h=None, metadata_dict={}):
         """
 
         :param x: (

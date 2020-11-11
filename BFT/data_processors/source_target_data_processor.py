@@ -6,9 +6,11 @@ class SourceTargetDataProcessor(nn.Module):
     Abstract class used for preprocessing and embedding
     
     It basically contains two DataProcessors (one for the source and one for the target)
-    Preprocessing: from ? -> (source, target) where 
+    Preprocessing: from ? -> (source, target, metadata_dict) where 
     - source is (batch_size, num_events_source, num_channels_source)
     - target is (batch_size, num_events_target, num_channels_target)
+    - metadata_dict is a dictionnary of (batch_size, ...) tensors that can be used by positional encodings and first token.
+    
     Embedding: from (batch_size, num_events, num_channels) ->
       (batch_size, num_events, num_channels, embedding_size)
     """

@@ -7,10 +7,10 @@ class BasePositionalEmbedding(nn.Module):
         # BasePositionalEmbedding must define
         # positional_embedding_size
 
-    def forward(self, x_embed, i=0, h=None, target=None):
+    def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         return x_embed, h
 
-    def forward_step(self, x_embed, i=0, h=None, target=None):
+    def forward_step(self, x_embed, i=0, h=None, metadata_dict={}):
         return x_embed, h
 
 
@@ -30,7 +30,7 @@ class PositionalEmbedding(nn.Module):
             for pe in base_positional_embedding_list
         ])
 
-    def forward(self, x_embed, i=0, h=None, target=None):
+    def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         """Concatenates all the simple_positional_embeddings
         on the last dim of x_embed
 
@@ -57,11 +57,11 @@ class PositionalEmbedding(nn.Module):
             x_embed, new_h_pe = positional_embedding.forward(x_embed,
                                                    i=i,
                                                    h=h_pe,
-                                                   target=target)
+                                                   metadata_dict=metadata_dict)
             new_h_list.append(new_h_pe)
         return x_embed, new_h_list
 
-    def forward_step(self, x_embed, i=0, h=None, target=None):
+    def forward_step(self, x_embed, i=0, h=None, metadata_dict={}):
         """Concatenates all the simple_positional_embeddings
         on the last dim of x_embed
 
@@ -86,6 +86,6 @@ class PositionalEmbedding(nn.Module):
             x_embed, new_h_pe = positional_embedding.forward_step(x_embed,
                                                    i=i,
                                                    h=h_pe,
-                                                   target=target)
+                                                   metadata_dict=metadata_dict)
             new_h_list.append(new_h_pe)
         return x_embed, new_h_list

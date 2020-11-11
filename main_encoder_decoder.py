@@ -141,14 +141,14 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #     top_p=0.9,
     #     top_k=0)
 
-    # scores = handler.generate_completion(num_completions=3,
-    #                                      temperature=1.,
-    #                                      top_p=0.9,
-    #                                      top_k=0,
-    #                                      midi_file='inputs/Test_X_1.mid')
+    scores = handler.generate_completion(num_completions=3,
+                                         temperature=1.,
+                                         top_p=0.9,
+                                         top_k=0,
+                                         midi_file='inputs/Test_X_1.mid')
     scores = handler.generate(temperature=1.,
                                       batch_size=3,
-                                      top_p=0.95,
+                                      top_p=0.8,
                                       top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
