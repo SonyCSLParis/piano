@@ -1,4 +1,4 @@
-from DatasetManager.metadata import Metadata
+from BFT.start_of_sequence_embeddings import SOSEmbedding
 from BFT.positional_embeddings import PositionalEmbedding
 from BFT.data_processors import SourceTargetDataProcessor
 from torch import nn
@@ -16,6 +16,7 @@ class EncoderDecoder(nn.Module):
                  dataloader_generator: DataloaderGenerator,
                  positional_embedding_source: PositionalEmbedding,
                  positional_embedding_target: PositionalEmbedding,
+                 sos_embedding: SOSEmbedding,
                  d_model_encoder,
                  d_model_decoder,
                  num_layers_encoder,
@@ -88,7 +89,7 @@ class EncoderDecoder(nn.Module):
 
         ########################################################
         # Start of sentence
-        self.sos_target = nn.Parameter(torch.randn((1, 1, self.d_model)))
+        self.sos_embedding = sos_embedding
 
         ######################################################
         self.encoder = LinearTransformerAnticausalEncoder(
@@ -159,7 +160,8 @@ class EncoderDecoder(nn.Module):
 
         # shift target_seq by one
         # Pad
-        dummy_input_target = self.sos_target.repeat(batch_size, 1, 1)
+        # sos_embedding is (batch_size, d_model_decoder)
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
         target_seq = torch.cat([dummy_input_target, target_seq], dim=1)
         target_seq = target_seq[:, :-1]
 
@@ -222,10 +224,10 @@ class EncoderDecoder(nn.Module):
         :param h_pe:
         :return:
         """
-        # TODO(gaetan) write SOS class which uses metadata_dict
         # deal with the SOS token embedding
         if i == 0:
-            target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]
+            # TODO check if correct:
+            target_seq = self.sos_embedding(metadata_dict)
         else:
             channel_index_input = (i - 1) % self.num_channels_target
             target = self.data_processor.preprocess(target)

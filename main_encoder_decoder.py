@@ -14,7 +14,7 @@ import torch
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from BFT.getters import get_dataloader_generator, get_source_target_data_processor, get_encoder_decoder, get_positional_embedding
+from BFT.getters import get_dataloader_generator, get_sos_embedding, get_source_target_data_processor, get_encoder_decoder, get_positional_embedding
 
 
 @click.command()
@@ -97,11 +97,17 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     positional_embedding_target: PositionalEmbedding = get_positional_embedding(
         dataloader_generator=dataloader_generator,
         positional_embedding_dict=config['positional_embedding_target_dict'])
+    # sos embedding
+    sos_embedding = get_sos_embedding(
+        dataloader_generator=dataloader_generator,
+        sos_embedding_dict=config['sos_embedding_dict']
+    )
     encoder_decoder = get_encoder_decoder(
         data_processor=data_processor,
         dataloader_generator=dataloader_generator,
         positional_embedding_source=positional_embedding_source,
         positional_embedding_target=positional_embedding_target,
+        sos_embedding=sos_embedding,
         encoder_decoder_type=config['encoder_decoder_type'],
         encoder_decoder_kwargs=config['encoder_decoder_kwargs'],
         training_phase=train)

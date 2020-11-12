@@ -57,6 +57,13 @@ config = {
             num_channels=4
         )
     ),
+    
+    # --- Start Of Sequence embeddings
+    'sos_embedding_dict': dict(
+        learnt_sos_embedding=dict(
+            embedding_size=512 # sum must be equal to d_model_decoder
+        )
+    ),
         
     # --- Decoder ---
     'encoder_decoder_type':                'linear_transformer',
