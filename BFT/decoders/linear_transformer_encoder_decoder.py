@@ -124,7 +124,6 @@ class EncoderDecoder(nn.Module):
         # add positional embeddings and flatten and to d_model
         source_seq = flatten(source_embedded)
 
-        metadata_dict['original_sequence'] = source
         # since Encoder is bidirectionnal, h is always None
         source_seq, h_pe_source = self.positional_embedding_source(
             source_seq, metadata_dict=metadata_dict, i=0, h=None)
@@ -152,7 +151,6 @@ class EncoderDecoder(nn.Module):
         batch_size, num_events_target, num_channels_source = target.size()
         target_embedded = self.data_processor.embed_target(target)
 
-        metadata_dict['original_sequence'] = target
         # add positional embeddings
         target_seq = flatten(target_embedded)
         target_seq, h_pe_target = self.positional_embedding_target(

@@ -22,10 +22,6 @@ config = {
     ),  # Can be different from the encoder's data processor
 
     # --- Positional Embedding ---
-    # WARNING:
-    # sinusoidal_elapsed_time_embedding makes no sense
-    # with bidirectionnal attention
-    
     'positional_embedding_source_dict': dict(
         sinusoidal_embedding= dict(
             positional_embedding_size=128,
@@ -35,7 +31,13 @@ config = {
         channel_embedding=dict(
             positional_embedding_size=12,
             num_channels=4
-        )
+        ),
+        sinusoidal_elapsed_time_embedding=dict(
+            positional_embedding_size=128,
+            num_channels=4,
+            mask_positions=True,
+            dropout=0.
+        ),
     ),
     
     'positional_embedding_target_dict': dict(
@@ -47,7 +49,8 @@ config = {
         sinusoidal_elapsed_time_embedding=dict(
             positional_embedding_size=128,
             num_channels=4,
-            dropout=0.
+            dropout=0.,
+            mask_positions=False,
         ),
         channel_embedding=dict(
             positional_embedding_size=12,

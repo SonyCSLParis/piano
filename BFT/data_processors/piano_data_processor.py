@@ -92,6 +92,7 @@ class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
         target = cuda_variable(x.long())
         source, masked_positions = self._mask_source(source)
         metadata_dict = dict(
-            masked_positions=masked_positions
+            masked_positions=masked_positions,
+            original_sequence=target
             )
         return source, target, metadata_dict

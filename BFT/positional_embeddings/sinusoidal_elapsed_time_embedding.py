@@ -1,5 +1,6 @@
 from BFT.positional_embeddings.positional_embedding import BasePositionalEmbedding
 from torch import nn
+from BFT.utils import flatten
 import torch
 import math
 
@@ -13,8 +14,11 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
 
         self.dropout = torch.nn.Dropout(p=dropout)
         self.num_channels = num_channels
-
-        
+        self.mask_positions = kwargs['mask_positions']
+        if self.mask_positions:
+            self.mask_vector = nn.Parameter(
+                torch.randn((self.positional_embedding_size, ))
+            )
 
     def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         assert i == 0
@@ -59,6 +63,18 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         )
         
         pos_embedding = self.dropout(pos_embedding)
+        
+        if self.mask_positions:
+            masked_positions = metadata_dict['masked_positions']
+            flattened_masked_positions = flatten(masked_positions)
+            flattened_masked_positions = flattened_masked_positions.view(batch_size * num_events * num_channels)
+            pos_embedding = pos_embedding.view(
+                batch_size * num_events * num_channels, self.positional_embedding_size
+            )
+            pos_embedding[flattened_masked_positions.bool()] = self.mask_vector.unsqueeze(0)
+            pos_embedding = pos_embedding.view(batch_size,
+                                          num_events * num_channels,
+                                          self.positional_embedding_size)
 
         x_embed = torch.cat([x_embed, pos_embedding], dim=2)
         return x_embed, h
@@ -70,7 +86,8 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         assert 'original_sequence' in metadata_dict, (
             'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
         )
-        
+        # TODO use of masked_positions?
+
         batch_size = x.size(0)
         # h represents the elapsed time
         if h is None:
