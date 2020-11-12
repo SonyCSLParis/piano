@@ -20,16 +20,24 @@ class EncoderDecoderHandler(Handler):
               self).__init__(model=model,
                              model_dir=model_dir,
                              dataloader_generator=dataloader_generator)
-              
+
     # ==== Wrappers
     def forward(self, source, target, metadata_dict, h_pe_init=None):
-        return self.model.forward(source, target, metadata_dict=metadata_dict, h_pe_init=h_pe_init)
-    
+        return self.model.forward(source,
+                                  target,
+                                  metadata_dict=metadata_dict,
+                                  h_pe_init=h_pe_init)
+
     def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
-        return self.model.module.forward_step(memory, target, metadata_dict, state, i, h_pe)
-    
+        return self.model.module.forward_step(memory, target, metadata_dict,
+                                              state, i, h_pe)
+
     def forward_source(self, source, metadata_dict):
         return self.model.module.forward_source(source, metadata_dict)
+
+    def mask_source(self, source, masked_positions):
+        return self.model.module.data_processor._mask_source(
+            x=source, masked_positions=masked_positions)
 
     # ==== Training methods
     def epoch(
@@ -56,7 +64,8 @@ class EncoderDecoderHandler(Handler):
             # ==========================
             with torch.no_grad():
                 x = tensor_dict['x']
-                source, target, metadata_dict = self.data_processor.preprocess(x)
+                source, target, metadata_dict = self.data_processor.preprocess(
+                    x)
 
             # ========Train decoder =============
             self.optimizer.zero_grad()
@@ -97,7 +106,12 @@ class EncoderDecoderHandler(Handler):
         return means
 
     # ===== Generation methods
-    def generate(self, source, temperature, batch_size=1, top_k=0, top_p=1.):
+    def generate(self,
+                 source,
+                 metadata_dict,
+                 temperature,
+                 top_k=0,
+                 top_p=1.):
         """Generate using the EncoderDecoder conditionned on source
 
         Args:
@@ -112,32 +126,35 @@ class EncoderDecoderHandler(Handler):
         """
         assert self.recurrent
         self.eval()
+        batch_size = source.size(0)
 
         # TODO hard coded value
         num_events = 1024
 
         x = torch.zeros(batch_size, num_events,
-                        self.num_channels_target).long()
+                        self.num_channels_target).long().to(source.device)
         with torch.no_grad():
 
             # init
             xi = torch.zeros_like(x)[:, 0, 0]
             state = None
             h_pe = None
-            
+
             # compute memory only once
-            memory = self.forward_source(source)
+            memory = self.forward_source(source, metadata_dict)
 
             # i corresponds to the position of the token BEING generated
             for event_index in range(num_events):
                 for channel_index in range(self.num_channels_target):
                     i = event_index * self.num_channels_target + channel_index
 
-                    forward_pass = self.forward_step(memory=memory,
-                                                     target=xi,
-                                                     state=state,
-                                                     i=i,
-                                                     h_pe=h_pe)
+                    forward_pass = self.forward_step(
+                        memory=memory,
+                        target=xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
@@ -155,7 +172,7 @@ class EncoderDecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(batch_size):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel[channel_index]),
+                            self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
                         x[batch_index, event_index,
                           channel_index] = int(new_pitch_index)
@@ -187,6 +204,22 @@ class EncoderDecoderHandler(Handler):
         ###############################
 
         return scores
+
+    def inpaint(self, x, masked_positions, temperature=1.0, top_p=1., top_k=0):
+        """Regenerated only tokens from x specified by masked_positions
+
+        Args:
+            x (LongTensor): (batch_size, num_events, num_channels)
+            masked_positions (BoolTensor): same as x
+        """
+        source, _ = self.mask_source(x, masked_positions)
+        metadata_dict = dict(original_sequence=x,
+                             masked_positions=masked_positions)
+        return self.generate(source,
+                             metadata_dict,
+                             temperature=temperature,
+                             top_k=top_k,
+                             top_p=top_p)
 
     def plot_attention(self, attentions_list, timestamp, name):
         """
@@ -341,7 +374,7 @@ class EncoderDecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(num_completions):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel[channel_index]),
+                            self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
 
                         # complete only

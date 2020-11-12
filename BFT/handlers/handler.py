@@ -48,8 +48,8 @@ class Handler:
         return self.model.module.recurrent
     
     @property
-    def num_tokens_per_channel(self):
-        return self.model.module.num_tokens_per_channel
+    def num_tokens_per_channel_target(self):
+        return self.model.module.data_processor.num_tokens_per_channel_target
     
     @property
     def num_channels_target(self):

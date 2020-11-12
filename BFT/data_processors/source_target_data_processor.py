@@ -46,6 +46,10 @@ class SourceTargetDataProcessor(nn.Module):
     def num_events_target(self):
         return self.decoder_data_processor.num_events
     
+    @property
+    def num_tokens_per_channel_target(self):
+        return self.decoder_data_processor.num_tokens_per_channel
+    
     def embed_source(self, x):
         """
         :param x: (..., num_channels)
@@ -83,7 +87,7 @@ class SourceTargetDataProcessor(nn.Module):
         x comes directly from the data_loader_generator.
         source and target must be put on the GPUs if needed.
         :param x: ? 
-        :return: (source, target) 
+        :return: (source, target, metadata_dict) 
         of size (batch_size, num_events_source, num_channels_source)
         (batch_size, num_events_target, num_channels_target)        
         """

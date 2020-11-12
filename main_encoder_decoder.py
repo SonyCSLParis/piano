@@ -72,8 +72,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
-    os.environ['MASTER_PORT'] = '12356'
-    # os.environ['MASTER_PORT'] = '12357'
+    # os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12357'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -100,8 +100,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # sos embedding
     sos_embedding = get_sos_embedding(
         dataloader_generator=dataloader_generator,
-        sos_embedding_dict=config['sos_embedding_dict']
-    )
+        sos_embedding_dict=config['sos_embedding_dict'])
     encoder_decoder = get_encoder_decoder(
         data_processor=data_processor,
         dataloader_generator=dataloader_generator,
@@ -113,16 +112,16 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         training_phase=train)
 
     encoder_decoder.to(device)
-    encoder_decoder = DistributedDataParallel(module=encoder_decoder,
-                                      device_ids=[rank],
-                                      output_device=rank,
-                                    #   find_unused_parameters=True
-                                      )
+    encoder_decoder = DistributedDataParallel(
+        module=encoder_decoder,
+        device_ids=[rank],
+        output_device=rank,
+        #   find_unused_parameters=True
+    )
 
     handler = EncoderDecoderHandler(model=encoder_decoder,
-                                     model_dir=model_dir,
-                                     dataloader_generator=dataloader_generator
-                                     )
+                                    model_dir=model_dir,
+                                    dataloader_generator=dataloader_generator)
 
     if load:
         if overfitted:
@@ -147,15 +146,25 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #     top_p=0.9,
     #     top_k=0)
 
-    scores = handler.generate_completion(num_completions=3,
-                                         temperature=1.,
-                                         top_p=0.9,
-                                         top_k=0,
-                                         midi_file='inputs/Test_X_1.mid')
-    scores = handler.generate(temperature=1.,
-                                      batch_size=3,
-                                      top_p=0.8,
-                                      top_k=0)
+    (generator_train, generator_val,
+     _) = dataloader_generator.dataloaders(batch_size=1,
+                                           num_workers=num_workers,
+                                           shuffle_val=True)
+    x = next(generator_train)['x']
+    _, x, _ = data_processor.preprocess(x)
+    x = x.repeat(4, 1, 1)
+    masked_positions = torch.zeros_like(x)
+    # masked_positions[1:, 100:150] = 1
+    # removes only notes
+    # masked_positions[1:, :, 0:3] = 1
+    # Velocifier
+    masked_positions[1:, :, 1:3] = 1
+
+    scores = handler.inpaint(x=x,
+                             masked_positions=masked_positions,
+                             temperature=1.,
+                             top_p=0.9,
+                             top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/Denisova04.MID')

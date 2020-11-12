@@ -11,7 +11,7 @@ class PianoDataProcessor(DataProcessor):
                  embedding_size,
                  num_events,
                  num_tokens_per_channel,
-                 add_mask_token=False): 
+                 add_mask_token=False):
         super(PianoDataProcessor,
               self).__init__(embedding_size=embedding_size,
                              num_events=num_events,
@@ -30,10 +30,10 @@ class PianoDataProcessor(DataProcessor):
         else:
             return reconstruction
 
+
 class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
     def __init__(self, embedding_size, num_events, num_tokens_per_channel):
-        
-        
+
         encoder_data_processor = PianoDataProcessor(
             embedding_size=embedding_size,
             num_events=num_events,
@@ -45,17 +45,15 @@ class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel,
             add_mask_token=False)
-        
-        super(MaskedPianoSourceTargetDataProcessor, self).__init__(
-            encoder_data_processor=encoder_data_processor,
-            decoder_data_processor=decoder_data_processor
-            )
-        
+
+        super(MaskedPianoSourceTargetDataProcessor,
+              self).__init__(encoder_data_processor=encoder_data_processor,
+                             decoder_data_processor=decoder_data_processor)
+
         # (num_channels, ) LongTensor
-        self.mask_symbols = nn.Parameter(
-            torch.LongTensor(self.encoder_data_processor.num_tokens_per_channel),
-            requires_grad=False
-        )
+        self.mask_symbols = nn.Parameter(torch.LongTensor(
+            self.encoder_data_processor.num_tokens_per_channel),
+                                         requires_grad=False)
 
     def _mask_source(self, x, masked_positions=None):
         """Add a MASK symbol
@@ -67,18 +65,26 @@ class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
         Returns:
             [type]: masked_x
         """
+        batch_size, num_events, num_channels = x.size()
         if masked_positions is None:
             p = random.random() * 0.5
-            masked_positions = (torch.rand_like(x.float()) > p).long()
-        
-        batch_size, num_events, num_channels = x.size()
+            # independant masking:
+            # masked_positions = (torch.rand_like(x.float()) > p)
+
+            # event masking:
+            masked_positions = torch.rand_like(x[:, :, 0].float()) > p
+            masked_positions = masked_positions.unsqueeze(2).repeat(
+                1, 1, num_channels)
+
+        masked_positions = masked_positions.long()
         mask_symbols = self.mask_symbols.unsqueeze(0).unsqueeze(0).repeat(
-            batch_size, num_events, 1
-        )
-        masked_x = (
-            x * (1 - masked_positions) + masked_positions * mask_symbols
-        )
+            batch_size, num_events, 1)
+        masked_x = (x * (1 - masked_positions) +
+                    masked_positions * mask_symbols)
         return masked_x, masked_positions
+
+    def postprocess(self, x):
+        return self.decoder_data_processor.postprocess(x)
 
     def preprocess(self, x):
         """
@@ -91,8 +97,6 @@ class MaskedPianoSourceTargetDataProcessor(SourceTargetDataProcessor):
         source = cuda_variable(x.long())
         target = cuda_variable(x.long())
         source, masked_positions = self._mask_source(source)
-        metadata_dict = dict(
-            masked_positions=masked_positions,
-            original_sequence=target
-            )
+        metadata_dict = dict(masked_positions=masked_positions,
+                             original_sequence=target)
         return source, target, metadata_dict

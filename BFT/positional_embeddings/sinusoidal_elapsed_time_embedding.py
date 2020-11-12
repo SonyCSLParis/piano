@@ -86,7 +86,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         assert 'original_sequence' in metadata_dict, (
             'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
         )
-        # TODO use of masked_positions?
 
         batch_size = x.size(0)
         # h represents the elapsed time
@@ -114,7 +113,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         # update h if the current token is a time_shift:
         if i % self.num_channels == self.num_channels - 1:
             # add fake features so that we can call get_elapsed_time
-            target = metadata_dict['original_sequence']
+            target = metadata_dict['original_token']
             target = target.unsqueeze(1).unsqueeze(1)
             target = target.repeat(1, 1, self.num_channels)
             elapsed_time = self.dataloader_generator.get_elapsed_time(

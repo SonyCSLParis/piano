@@ -138,7 +138,7 @@ class DecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(batch_size):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel[channel_index]),
+                            self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
                         x[batch_index, event_index,
                           channel_index] = int(new_pitch_index)
@@ -215,7 +215,7 @@ class DecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(batch_size):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel[channel_index]),
+                            self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
                         x[batch_index, event_index,
                           channel_index] = int(new_pitch_index)
@@ -401,7 +401,7 @@ class DecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(num_completions):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel[channel_index]),
+                            self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
 
                         # complete only
