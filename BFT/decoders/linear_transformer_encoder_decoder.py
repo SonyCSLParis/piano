@@ -1,4 +1,4 @@
-from DatasetManager.metadata import Metadata
+from BFT.start_of_sequence_embeddings import SOSEmbedding
 from BFT.positional_embeddings import PositionalEmbedding
 from BFT.data_processors import SourceTargetDataProcessor
 from torch import nn
@@ -16,6 +16,7 @@ class EncoderDecoder(nn.Module):
                  dataloader_generator: DataloaderGenerator,
                  positional_embedding_source: PositionalEmbedding,
                  positional_embedding_target: PositionalEmbedding,
+                 sos_embedding: SOSEmbedding,
                  d_model_encoder,
                  d_model_decoder,
                  num_layers_encoder,
@@ -88,7 +89,7 @@ class EncoderDecoder(nn.Module):
 
         ########################################################
         # Start of sentence
-        self.sos_target = nn.Parameter(torch.randn((1, 1, self.d_model)))
+        self.sos_embedding = sos_embedding
 
         ######################################################
         self.encoder = LinearTransformerAnticausalEncoder(
@@ -96,7 +97,7 @@ class EncoderDecoder(nn.Module):
             n_heads=n_head_encoder,
             n_layers=num_layers_encoder,
             dim_feedforward=dim_feedforward_encoder,
-            recurrent=recurrent)
+            recurrent=False)
 
         self.decoder = LinearTransformerCausalDiagonalDecoder(
             d_model=d_model_decoder,
@@ -124,8 +125,7 @@ class EncoderDecoder(nn.Module):
         # add positional embeddings and flatten and to d_model
         source_seq = flatten(source_embedded)
 
-        metadata_dict['original_sequence'] = source
-        # since Encoder is bidirectionnal, h is always None
+        # since Encoder is bidirectionnal or anticausal, h is always None
         source_seq, h_pe_source = self.positional_embedding_source(
             source_seq, metadata_dict=metadata_dict, i=0, h=None)
         source_seq = self.linear_source(source_seq)
@@ -152,7 +152,6 @@ class EncoderDecoder(nn.Module):
         batch_size, num_events_target, num_channels_source = target.size()
         target_embedded = self.data_processor.embed_target(target)
 
-        metadata_dict['original_sequence'] = target
         # add positional embeddings
         target_seq = flatten(target_embedded)
         target_seq, h_pe_target = self.positional_embedding_target(
@@ -161,7 +160,8 @@ class EncoderDecoder(nn.Module):
 
         # shift target_seq by one
         # Pad
-        dummy_input_target = self.sos_target.repeat(batch_size, 1, 1)
+        # sos_embedding is (batch_size, d_model_decoder)
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
         target_seq = torch.cat([dummy_input_target, target_seq], dim=1)
         target_seq = target_seq[:, :-1]
 
@@ -224,10 +224,10 @@ class EncoderDecoder(nn.Module):
         :param h_pe:
         :return:
         """
-        # TODO(gaetan) write SOS class which uses metadata_dict
         # deal with the SOS token embedding
         if i == 0:
-            target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]
+            # TODO check if correct:
+            target_seq = self.sos_embedding(metadata_dict)
         else:
             channel_index_input = (i - 1) % self.num_channels_target
             target = self.data_processor.preprocess(target)

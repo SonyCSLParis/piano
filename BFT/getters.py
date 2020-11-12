@@ -1,3 +1,4 @@
+from BFT.start_of_sequence_embeddings import SOSEmbedding, BaseSOSEmbedding, LearntSOSEmbedding
 from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding
 from BFT.data_processors import BachDataProcessor, MaskedPianoSourceTargetDataProcessor, PianoDataProcessor
 from BFT.dataloaders import BachDataloaderGenerator, PianoDataloaderGenerator
@@ -126,6 +127,7 @@ def get_encoder_decoder(data_processor,
                         dataloader_generator,
                         positional_embedding_source,
                         positional_embedding_target,
+                        sos_embedding,
                         encoder_decoder_type,
                         encoder_decoder_kwargs,
                         training_phase):
@@ -136,6 +138,7 @@ def get_encoder_decoder(data_processor,
             dataloader_generator=dataloader_generator,
             positional_embedding_target=positional_embedding_target,
             positional_embedding_source=positional_embedding_source,
+            sos_embedding=sos_embedding,
             d_model_encoder=encoder_decoder_kwargs['d_model_encoder'],
             d_model_decoder=encoder_decoder_kwargs['d_model_decoder'],
             num_layers_decoder=encoder_decoder_kwargs['num_layers_decoder'],
@@ -155,3 +158,19 @@ def get_encoder_decoder(data_processor,
         raise NotImplementedError
 
     return decoder
+
+def get_sos_embedding(dataloader_generator,
+                             sos_embedding_dict) -> SOSEmbedding:
+    base_sos_embedding_list = []
+    for sos_name, sos_kwargs in sos_embedding_dict.items():
+        if sos_name == 'learnt_sos_embedding':
+            base_sos: BaseSOSEmbedding = LearntSOSEmbedding(
+                embedding_size=sos_kwargs[
+                    'embedding_size']
+            )
+        else:
+            raise NotImplementedError
+        base_sos_embedding_list.append(base_sos)
+
+    return SOSEmbedding(
+        base_sos_embedding_list=base_sos_embedding_list)
