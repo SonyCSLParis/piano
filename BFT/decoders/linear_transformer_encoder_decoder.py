@@ -96,7 +96,7 @@ class EncoderDecoder(nn.Module):
             n_heads=n_head_encoder,
             n_layers=num_layers_encoder,
             dim_feedforward=dim_feedforward_encoder,
-            recurrent=recurrent)
+            recurrent=False)
 
         self.decoder = LinearTransformerCausalDiagonalDecoder(
             d_model=d_model_decoder,
@@ -124,7 +124,7 @@ class EncoderDecoder(nn.Module):
         # add positional embeddings and flatten and to d_model
         source_seq = flatten(source_embedded)
 
-        # since Encoder is bidirectionnal, h is always None
+        # since Encoder is bidirectionnal or anticausal, h is always None
         source_seq, h_pe_source = self.positional_embedding_source(
             source_seq, metadata_dict=metadata_dict, i=0, h=None)
         source_seq = self.linear_source(source_seq)
