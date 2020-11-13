@@ -105,7 +105,7 @@ def categorical_crossentropy(value, target, mask=None, label_smoothing=False):
         if not label_smoothing:
             ce = cross_entropy(probs, tgt)
         else:
-            eps = 0.1
+            eps = 0.02
             one_hot = torch.zeros_like(probs).scatter(1, tgt.view(-1, 1), 1)
             one_hot = (one_hot * (1 - eps) + 
                        (1 - one_hot) * eps / (num_tokens_of_channel - 1)

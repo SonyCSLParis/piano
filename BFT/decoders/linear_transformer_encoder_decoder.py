@@ -234,13 +234,13 @@ class EncoderDecoder(nn.Module):
             target_embedded = self.data_processor.embed_step_target(
                 target, channel_index=channel_index_input)
             # add positional embeddings
+            metadata_dict['original_token'] = target
             target_embedded, h_pe = self.positional_embedding_target.forward_step(
                 target_embedded,
                 i=(i - 1),
                 h=h_pe,
                 metadata_dict=metadata_dict)
             target_seq = self.linear_target(target_embedded)
-            metadata_dict['original_token'] = target
             
         # TODO(gaetan) check state with diagonal
         output, state = self.decoder.forward_step(memory=memory,
