@@ -62,7 +62,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             self.num_channels, dim=1
         )
         
-        pos_embedding = self.dropout(pos_embedding)
         
         if self.mask_positions:
             masked_positions = metadata_dict['masked_positions']
@@ -76,6 +75,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
                                           num_events * num_channels,
                                           self.positional_embedding_size)
 
+        pos_embedding = self.dropout(pos_embedding)
         x_embed = torch.cat([x_embed, pos_embedding], dim=2)
         return x_embed, h
 
