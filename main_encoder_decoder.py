@@ -71,9 +71,9 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
          model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    # os.environ['MASTER_PORT'] = '12355'
     # os.environ['MASTER_PORT'] = '12356'
-    # os.environ['MASTER_PORT'] = '12357'
+    os.environ['MASTER_PORT'] = '12357'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -150,12 +150,16 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
      _) = dataloader_generator.dataloaders(batch_size=1,
                                            num_workers=num_workers,
                                            shuffle_val=True)
-    x = next(generator_train)['x']
+    x = next(generator_val)['x']
     _, x, _ = data_processor.preprocess(x)
     x = x.repeat(4, 1, 1)
     masked_positions = torch.zeros_like(x)
     # inpainting
     masked_positions[1:, 100:200] = 1
+    masked_positions[1:, 300:350] = 1
+    masked_positions[1:, 450:600] = 1
+    masked_positions[1:, 800:] = 1
+    
     # unconstrained:
     # masked_positions[1:, :] = 1
     # removes only notes
@@ -166,7 +170,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     scores = handler.inpaint(x=x,
                              masked_positions=masked_positions,
                              temperature=1.,
-                             top_p=0.98,
+                             top_p=0.95,
                              top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')

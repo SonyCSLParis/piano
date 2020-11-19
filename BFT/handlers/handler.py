@@ -24,7 +24,10 @@ class Handler:
         self.scheduler = None
 
     def init_optimizers(self, lr=1e-3):
-        self.optimizer = torch.optim.Adam(list(self.parameters()), lr=lr)
+        # self.optimizer = torch.optim.Adam(list(self.parameters()), lr=lr)
+        self.optimizer = torch.optim.AdamW(list(self.parameters()),
+                                           lr=lr,
+                                           weight_decay=1e-3)
 
     # ==== Wrappers
     def forward(self, target, h_pe_init=None):
