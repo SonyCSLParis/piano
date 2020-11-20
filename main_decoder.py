@@ -106,8 +106,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
 
     decoder.to(device)
     decoder = DistributedDataParallel(module=decoder,
-                                        device_ids=[rank],
-                                        output_device=rank)
+                                      device_ids=[rank],
+                                      output_device=rank)
 
     decoder_handler = DecoderHandler(
         model=decoder,
@@ -119,7 +119,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
             decoder_handler.load(early_stopped=False)
         else:
             decoder_handler.load(early_stopped=True)
-            
+
     if train:
         decoder_handler.train_model(
             batch_size=config['batch_size'],

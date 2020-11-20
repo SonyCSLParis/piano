@@ -18,7 +18,7 @@ class Handler:
                  dataloader_generator: DataloaderGenerator) -> None:
         self.model = model
         self.model_dir = model_dir
-        self.dataloader_generator = dataloader_generator        
+        self.dataloader_generator = dataloader_generator
         # optim
         self.optimizer = None
         self.scheduler = None
@@ -32,7 +32,7 @@ class Handler:
     # ==== Wrappers
     def forward(self, target, h_pe_init=None):
         return self.model.forward(target, h_pe_init=h_pe_init)
-    
+
     def forward_step(self, target, state, i, h_pe):
         return self.model.module.forward_step(target, state, i, h_pe)
 
@@ -44,16 +44,16 @@ class Handler:
 
     def parameters(self):
         return self.model.parameters()
-    
+
     # expose useful attributes for generation
     @property
     def recurrent(self):
         return self.model.module.recurrent
-    
+
     @property
     def num_tokens_per_channel_target(self):
         return self.model.module.data_processor.num_tokens_per_channel_target
-    
+
     @property
     def num_channels_target(self):
         return self.model.module.num_channels_target

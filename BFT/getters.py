@@ -7,11 +7,12 @@ from BFT.decoders.linear_transformer_decoder import CausalEncoder
 from BFT.decoders.linear_transformer_encoder_decoder import EncoderDecoder
 
 
-def get_dataloader_generator(dataset, dataloader_generator_kwargs):
-    if dataset.lower() == 'bach':
+def get_dataloader_generator(dataset: str, dataloader_generator_kwargs):
+    dataset = dataset.lower()
+    if dataset == 'bach':
         return BachDataloaderGenerator(
             sequences_size=dataloader_generator_kwargs['sequences_size'])
-    elif dataset.lower() == 'piano':
+    elif dataset == 'piano':
         return PianoDataloaderGenerator(
             sequences_size=dataloader_generator_kwargs['sequences_size'],
             transformations=dataloader_generator_kwargs['transformations'])
@@ -21,7 +22,6 @@ def get_dataloader_generator(dataset, dataloader_generator_kwargs):
 
 def get_data_processor(dataloader_generator, data_processor_type,
                        data_processor_kwargs):
-
     if data_processor_type == 'bach':
         # compute num_events num_tokens_per_channel
         dataset = dataloader_generator.dataset
@@ -49,8 +49,7 @@ def get_data_processor(dataloader_generator, data_processor_type,
 
 
 def get_source_target_data_processor(dataloader_generator, data_processor_type,
-                          data_processor_kwargs):
-
+                                     data_processor_kwargs):
     if data_processor_type == 'bach':
         # TODO not implemented
         raise NotImplementedError
@@ -123,7 +122,7 @@ def get_decoder(data_processor, dataloader_generator, positional_embedding,
     return decoder
 
 
-def get_encoder_decoder(data_processor, 
+def get_encoder_decoder(data_processor,
                         dataloader_generator,
                         positional_embedding_source,
                         positional_embedding_target,
