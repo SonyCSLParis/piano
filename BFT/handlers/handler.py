@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 from torch.distributed.distributed_c10d import get_world_size
 from BFT.dataloaders.dataloader import DataloaderGenerator
 from BFT.utils import all_reduce_scalar, dict_pretty_print, display_monitored_quantities, is_main_process, to_numpy, top_k_top_p_filtering
@@ -12,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 
 
-class Handler:
+class Handler(metaclass=ABCMeta):
     def __init__(self, model: DistributedDataParallel,
                  model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
@@ -152,9 +153,10 @@ class Handler:
             if plot:
                 self.plot(epoch_id, monitored_quantities_train,
                           monitored_quantities_val)
-                
+
+    @abstractmethod
     def epoch(self,
         data_loader,
         train=True,
         num_batches=None):
-        raise NotImplementedError
+        return

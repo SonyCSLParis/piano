@@ -6,7 +6,7 @@ from BFT.utils import cuda_variable
 
 class DataProcessor(nn.Module):
     """
-    Abstract class used for preprocessing and embedding
+    Base class used for preprocessing and embedding
     Preprocessing: from ? -> (batch_size, num_events, num_channels)
     Embedding: from (batch_size, num_events, num_channels) ->
       (batch_size, num_events, num_channels, embedding_size)

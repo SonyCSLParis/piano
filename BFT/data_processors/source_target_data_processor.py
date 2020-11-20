@@ -1,7 +1,8 @@
+from abc import ABCMeta, abstractmethod
 from .data_processor import DataProcessor
 from torch import nn
 
-class SourceTargetDataProcessor(nn.Module):
+class SourceTargetDataProcessor(nn.Module, metaclass=ABCMeta):
     """
     Abstract class used for preprocessing and embedding
 
@@ -80,6 +81,7 @@ class SourceTargetDataProcessor(nn.Module):
         return self.decoder_data_processor.embed_step(
             x, channel_index=channel_index)
 
+    @abstractmethod
     def preprocess(self, x):
         """
         Subclasses must implement this method
@@ -91,6 +93,6 @@ class SourceTargetDataProcessor(nn.Module):
         of size (batch_size, num_events_source, num_channels_source)
         (batch_size, num_events_target, num_channels_target)
         """
-        raise NotImplementedError
+        return
 
 
