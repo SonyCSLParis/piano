@@ -204,6 +204,88 @@ class EncoderDecoderHandler(Handler):
         ###############################
 
         return scores
+    
+    
+    def generate_region(self,
+                 source,
+                 metadata_dict,
+                 temperature,
+                 start_event,
+                 end_event,
+                 top_k=0,
+                 top_p=1.):
+        """Generate using the EncoderDecoder conditionned on source
+
+        Args:
+            source (LongTensor): (batch_size, num_events_source, num_channels_source)
+            temperature ([type]): [description]
+            start_event:
+            end_event:            
+            batch_size (int, optional): [description]. Defaults to 1.
+            top_k (int, optional): [description]. Defaults to 0.
+            top_p ([type], optional): [description]. Defaults to 1..
+
+        Returns:
+            [type]: the inpainted region (batch_size, end_event - start_event, num_channels)
+        """
+        assert self.recurrent
+        self.eval()
+        batch_size = source.size(0)
+        
+        num_events = end_event - start_event
+
+
+        x = torch.zeros(batch_size, num_events,
+                        self.num_channels_target).long().to(source.device)
+        with torch.no_grad():
+
+            # init
+            xi = torch.zeros_like(x)[:, 0, 0]
+            state = None
+            h_pe = None
+
+            # compute memory only once
+            memory = self.forward_source(source, metadata_dict)
+
+            # i corresponds to the position of the token BEING generated
+            for event_index in range(start_event, end_event):
+                for channel_index in range(self.num_channels_target):
+                    i = event_index * self.num_channels_target + channel_index
+
+                    forward_pass = self.forward_step(
+                        memory=memory,
+                        target=xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
+                    weights = forward_pass['weights']
+
+                    logits = weights / temperature
+
+                    filtered_logits = []
+                    for logit in logits:
+                        filter_logit = top_k_top_p_filtering(logit,
+                                                             top_k=top_k,
+                                                             top_p=top_p)
+                        filtered_logits.append(filter_logit)
+                    filtered_logits = torch.stack(filtered_logits, dim=0)
+                    # Sample from the filtered distribution
+                    p = to_numpy(torch.softmax(filtered_logits, dim=-1))
+
+                    # update generated sequence
+                    for batch_index in range(batch_size):
+                        new_pitch_index = np.random.choice(np.arange(
+                            self.num_tokens_per_channel_target[channel_index]),
+                                                           p=p[batch_index])
+                        x[batch_index, event_index - start_event,
+                          channel_index] = int(new_pitch_index)
+
+                    # update
+                    xi = x[:, event_index - start_event, channel_index]
+                    h_pe = forward_pass['h_pe']
+                    state = forward_pass['state']
+        return x
 
     def inpaint(self, x, masked_positions, temperature=1.0, top_p=1., top_k=0):
         """Regenerated only tokens from x specified by masked_positions
@@ -220,6 +302,37 @@ class EncoderDecoderHandler(Handler):
                              temperature=temperature,
                              top_k=top_k,
                              top_p=top_p)
+        
+    def inpaint_region(self, x, start_event, end_event,
+                       masked_positions, 
+                       temperature=1.0, top_p=1., top_k=0):
+        """Regenerated only tokens from x specified by masked_positions between start_event and end_event
+
+        Args:
+            x (LongTensor): (batch_size, num_events, num_channels)
+            masked_positions (BoolTensor): same as x
+        """
+        source, _ = self.mask_source(x, masked_positions)
+        metadata_dict = dict(original_sequence=x,
+                             masked_positions=masked_positions)
+        region =  self.generate_region(
+            source,
+                             metadata_dict,
+                             start_event=start_event,
+                             end_event=end_event,
+                             temperature=temperature,
+                             top_k=top_k,
+                             top_p=top_p)
+        
+        output = torch.cat(
+            [
+                x[:, :start_event],
+                region,
+                x[:, end_event:]
+            ], dim=1
+        )
+        # TODO save here
+        return output
 
     def plot_attention(self, attentions_list, timestamp, name):
         """
