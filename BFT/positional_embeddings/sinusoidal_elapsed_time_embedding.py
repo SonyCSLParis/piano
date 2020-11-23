@@ -33,6 +33,8 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         elapsed_time = self.dataloader_generator.get_elapsed_time(
             x
         )
+        
+        h = elapsed_time[:, -1] 
         # add zeros
         elapsed_time = torch.cat(            
             [
@@ -41,13 +43,15 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             ],
             dim=1
         )
-        h = elapsed_time[:, -1]
         
         # add embedding_dim to elapsed time
         elapsed_time = elapsed_time.unsqueeze(2)
         
         # TODO scale?!
         elapsed_time = elapsed_time * 100
+        h = h * 100
+        
+
         
         pe = torch.zeros(batch_size, 
                          num_events, self.positional_embedding_size)

@@ -152,13 +152,13 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
                                            shuffle_val=True)
     x = next(generator_val)['x']
     _, x, _ = data_processor.preprocess(x)
-    x = x.repeat(4, 1, 1)
+    x = x.repeat(1, 1, 1)
     masked_positions = torch.zeros_like(x)
     # inpainting
-    masked_positions[1:, 100:200] = 1
-    masked_positions[1:, 300:350] = 1
-    masked_positions[1:, 450:600] = 1
-    masked_positions[1:, 800:] = 1
+    masked_positions[0:, 100:200] = 1
+    masked_positions[0:, 300:350] = 1
+    masked_positions[0:, 450:600] = 1
+    masked_positions[0:, 800:] = 1
     
     # unconstrained:
     # masked_positions[1:, :] = 1
@@ -166,12 +166,23 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # masked_positions[1:, :, 0:3] = 1
     # Velocifier
     # masked_positions[1:, :, 1:3] = 1
+    
+    # TEST
+    metadata_dict = dict(original_sequence=x,
+                             masked_positions=masked_positions)
+    handler.test_decoder_with_states(
+        source=x,
+        metadata_dict=metadata_dict,
+        temperature=1.,
+        top_p=0.95
+    )
 
-    scores = handler.inpaint(x=x,
-                             masked_positions=masked_positions,
-                             temperature=1.,
-                             top_p=0.95,
-                             top_k=0)
+
+    # scores = handler.inpaint(x=x,
+    #                          masked_positions=masked_positions,
+    #                          temperature=1.,
+    #                          top_p=0.95,
+    #                          top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/Denisova04.MID')

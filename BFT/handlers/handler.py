@@ -88,8 +88,23 @@ class Handler:
         else:
             print('Load over-fitted model')
             model_dir = f'{self.model_dir}/overfitted'
+            
+        state_dict = torch.load(f'{model_dir}/model',
+                                map_location=map_location)
+        
+        # TODO, handle this properly
+        # copy transformer_with_states during inference
+        
+        transformer_with_states_dict = {}
+        for k, v in state_dict.items():
+            if 'transformer' in k:
+                new_key = k.replace('decoder.transformer', 'decoder.transformer_with_states')
+                transformer_with_states_dict[new_key] = v
+        state_dict.update(transformer_with_states_dict)
+
         self.model.load_state_dict(
-            torch.load(f'{model_dir}/model', map_location=map_location))
+            state_dict=state_dict
+            )
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:

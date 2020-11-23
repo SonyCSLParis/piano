@@ -1,4 +1,5 @@
 from fast_transformers.builders import TransformerEncoderBuilder, RecurrentEncoderBuilder, TransformerDecoderBuilder, RecurrentDecoderBuilder, TransformerDiagonalDecoderBuilder, RecurrentDiagonalDecoderBuilder
+from fast_transformers.builders.transformer_builders import TransformerDiagonalDecoderBuilderWithStates
 
 from fast_transformers.masking import TriangularCausalMask
 
@@ -283,6 +284,20 @@ class LinearTransformerCausalDiagonalDecoder(nn.Module):
                 activation="gelu",
                 final_normalization=True
             ).get()
+            
+            self.transformer_with_states = TransformerDiagonalDecoderBuilderWithStates.from_kwargs(
+                n_layers=n_layers,
+                n_heads=n_heads,
+                query_dimensions=query_dimension,
+                value_dimensions=query_dimension,
+                feed_forward_dimensions=dim_feedforward,
+                dropout=dropout,
+                self_attention_type="causal-linear-states",
+                cross_attention_type='diagonal-states',
+                activation="gelu",
+                final_normalization=True                
+            ).get()
+
 
     def forward(self, memory, target):
         """
@@ -292,6 +307,19 @@ class LinearTransformerCausalDiagonalDecoder(nn.Module):
         """
         triangular_mask = TriangularCausalMask(target.size(1), device=target.device)
         return self.transformer(x=target, 
+                                memory=memory,
+                                x_mask=triangular_mask,
+                                memory_mask=None)
+        
+    def forward_with_states(self, memory, target):
+        """
+        Same as forward, but state is returned. Used only during inference
+        Here, transformer is non recurrent
+        :param x: (batch_size, num_tokens, feature_dim)
+        :return:
+        """
+        triangular_mask = TriangularCausalMask(target.size(1), device=target.device)
+        return self.transformer_with_states(x=target, 
                                 memory=memory,
                                 x_mask=triangular_mask,
                                 memory_mask=None)
