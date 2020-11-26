@@ -117,15 +117,11 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
                                     dataloader_generator=dataloader_generator)
     # Load model
     if overfitted:
-        handler.load(early_stopped=False)        
-    else:        
+        handler.load(early_stopped=False)
+    else:
         handler.load(early_stopped=True)
 
-
     # debug_test()
-
-
-
 
     local_only = False
     if local_only:
@@ -150,8 +146,6 @@ def inpaint():
 @app.route('/test', methods=['GET', 'POST'])
 def debug():
     d = json.loads(request.data)
-    
-
 
     print(d)
     notes = d['notes']
@@ -164,7 +158,7 @@ def debug():
     num_examples = 1
     x = x.unsqueeze(0).repeat(num_examples, 1, 1)
     _, x, _ = data_processor.preprocess(x)
-    
+
     # TODO case where x is bigger than 1024
     # TODO add num_notes
     # TODO exclude pad and start symbols
@@ -177,37 +171,35 @@ def debug():
     x = torch.cat([
         x,
         torch.zeros(num_examples, 1024 - x.size(1), 4).long().to(x.device)
-    ], dim=1)
-    
+    ],
+                  dim=1)
+
     masked_positions = torch.zeros_like(x).long()
-    masked_positions[:, event_start: event_end] = 1
-    
+    masked_positions[:, event_start:event_end] = 1
+
     # TODO we are forced to do this
     event_start = 0
-    
+
     global handler
     print(f'event: {event_start, event_end}')
     output = handler.inpaint_region(x=x,
-                             masked_positions=masked_positions,
-                             start_event=event_start,
-                             end_event=event_end,
-                             temperature=1.,
-                             top_p=0.95,
-                             top_k=0)
-    
-    
-    
+                                    masked_positions=masked_positions,
+                                    start_event=event_start,
+                                    end_event=event_end,
+                                    temperature=1.,
+                                    top_p=0.95,
+                                    top_k=0)
+
     ableton_notes, track_duration = tensor_to_ableton(
-        output[0, :original_size]
-    )
-    
+        output[0, :original_size])
+
     print(f'albeton notes: {ableton_notes}')
-    d =     {
+    d = {
         'id': d['id'],
         'notes': ableton_notes,
         'track_duration': track_duration,
         'clip_id': d['clip_id']
-        }
+    }
     return jsonify(d)
 
 
@@ -222,7 +214,7 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
     mod = -1
     # pitch time duration velocity muted
     ableton_features = ['pitch', 'time', 'duration', 'velocity', 'muted']
-    
+
     if selected_region is not None:
         start_time = selected_region['start']
         end_time = selected_region['end']
@@ -249,18 +241,18 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
              time=torch.FloatTensor([x[1] for x in l]),
              duration=torch.FloatTensor([max(float(x[2]), 0.05) for x in l]),
              velocity=torch.LongTensor([x[3] for x in l]))
-    
-    # compute start_event, end_event    
+
+    # compute start_event, end_event
     if selected_region is not None:
         i = 0
         flag = True
         while flag:
             if d['time'][i].item() >= start_time:
                 flag = False
-                event_start = i # TODO check
+                event_start = i  # TODO check
             else:
                 i = i + 1
-                
+
         i = 0
         flag = True
         while flag:
@@ -269,13 +261,13 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
                 event_end = i
             elif d['time'][i].item() >= end_time:
                 flag = False
-                event_end = i # TODO check
+                event_end = i  # TODO check
             else:
                 i = i + 1
-            
+
         # _, min_indices = torch.min((d['time'] > start_time).int(), dim=0)
         # event_start = min_indices.max().item()
-        
+
         # _, max_indices = torch.max((d['time'] < end_time).int(), dim=0)
         # event_end = max_indices.min().item()
     else:
@@ -283,6 +275,7 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
 
     # multiply by tempo
     tempo = 0.5  # 120 bpm
+    # tempo = 1  # absolute timing?
     d['time'] = d['time'] * tempo
     d['duration'] = d['duration'] * tempo
 
@@ -290,17 +283,20 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
     d['time_shift'] = torch.cat(
         [d['time'][1:] - d['time'][:-1],
          torch.zeros(1, )], dim=0)
-    
+
     global handler
-    
+
     # to numpy :(
-    d = {k: t.numpy() for k,t in d.items()}
+    d = {k: t.numpy() for k, t in d.items()}
     sequence_dict = handler.dataloader_generator.dataset.tokenize(d)
     # to pytorch :)
-    sequence_dict = {k: torch.LongTensor(t) for k,t in sequence_dict.items()}
-    
-    x = torch.stack([sequence_dict[e] for e in handler.dataloader_generator.features], dim=-1).long()
+    sequence_dict = {k: torch.LongTensor(t) for k, t in sequence_dict.items()}
+
+    x = torch.stack(
+        [sequence_dict[e] for e in handler.dataloader_generator.features],
+        dim=-1).long()
     return x, (event_start, event_end)
+
 
 def tensor_to_ableton(tensor):
     """[summary]
@@ -310,43 +306,54 @@ def tensor_to_ableton(tensor):
     """
     # channels are ['pitch', 'velocity', 'duration', 'time_shift']
     notes = []
-    tempo = 2 # 120 bpm
+    tempo = 2  # 120 bpm
+    # tempo = 1 # absolute time
     tensor = tensor.detach().cpu()
     global handler
     index2value = handler.dataloader_generator.dataset.index2value
     num_events, num_channels = tensor.size()
-    timeshifts = torch.FloatTensor([index2value['time_shift'][ts.item()] for ts in tensor[:, 3]])
+    timeshifts = torch.FloatTensor(
+        [index2value['time_shift'][ts.item()] for ts in tensor[:, 3]])
     time = torch.cumsum(timeshifts, dim=0)
-    time = torch.cat([
-        torch.zeros((1,)),
-        time[:-1]
-                      ], dim=0) * tempo
+    time = torch.cat([torch.zeros((1, )), time[:-1]], dim=0) * tempo
     for i in range(num_events):
-        note = dict(
-            pitch=index2value['pitch'][tensor[i, 0].item()],
-            start=time[i].item() * tempo,
-            duration=index2value['duration'][tensor[i, 2].item()],
-            velocity=index2value['velocity'][tensor[i, 1].item()],
-            muted=0
-        )
+        note = dict(pitch=index2value['pitch'][tensor[i, 0].item()],
+                    start=time[i].item(),
+                    duration=index2value['duration'][tensor[i, 2].item()] *
+                    tempo,
+                    velocity=index2value['velocity'][tensor[i, 1].item()],
+                    muted=0)
         notes.append(note)
-    
+
     track_duration = time[-1].item() + notes[-1]['duration'].item()
     return notes, track_duration
 
+
 def debug_test():
-    {'id': '45', 'notes': ['notes', 8, 'note', 62, 1.25, 0.25, 95, 0, 'note', 64, 0, 0.25, 100, 0, 'note', 66, 0.5, 0.25, 95, 0, 'note', 67, 1, 0.25, 95, 0, 'note', 68, 0.75, 0.25, 95, 0, 'note', 70, 0.25, 0.25, 95, 0, 'note', 70, 1.5, 0.25, 95, 0, 'note', 72, 0.5, 0.25, 95, 0, 'done'], 'selected_region': {'start': 0.5, 'end': 1.25}}
+    {
+        'id':
+        '45',
+        'notes': [
+            'notes', 8, 'note', 62, 1.25, 0.25, 95, 0, 'note', 64, 0, 0.25,
+            100, 0, 'note', 66, 0.5, 0.25, 95, 0, 'note', 67, 1, 0.25, 95, 0,
+            'note', 68, 0.75, 0.25, 95, 0, 'note', 70, 0.25, 0.25, 95, 0,
+            'note', 70, 1.5, 0.25, 95, 0, 'note', 72, 0.5, 0.25, 95, 0, 'done'
+        ],
+        'selected_region': {
+            'start': 0.5,
+            'end': 1.25
+        }
+    }
     notes = d['notes']
     selected_region = d['selected_region']
     x, (event_start, event_end) = ableton_to_tensor(notes, selected_region)
-    
+
     print(x)
     print(event_start, event_end)
-    
+
 
 if __name__ == "__main__":
     launcher()
-
 
 # Response format
 # {'id': '14', 'notes': ['notes', 10, 'note', 64, 0.5, 0.25, 100, 0, 'note', 64, 0.75, 0.25, 100, 0, 'note', 64, 1, 0.25, 100, 0, 'note', 65, 0.25, 0.25, 100, 0, 'note', 68, 1, 0.25, 100, 0, 'note', 69, 0, 0.25, 100, 0, 'note', 69, 0.75, 0.25, 100, 0, 'note', 69, 1.25, 2, 100, 0, 'note', 70, 0.5, 0.25, 100, 0, 'note', 71, 0.25, 0.25, 100, 0, 'done'], 'duration': 4}
