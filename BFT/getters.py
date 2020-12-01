@@ -1,3 +1,4 @@
+from BFT.dataloaders.nes_dataloader import NESDataloader
 from BFT.start_of_sequence_embeddings import SOSEmbedding, BaseSOSEmbedding, LearntSOSEmbedding
 from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding
 from BFT.data_processors import BachDataProcessor, MaskedPianoSourceTargetDataProcessor, PianoDataProcessor
@@ -15,6 +16,9 @@ def get_dataloader_generator(dataset, dataloader_generator_kwargs):
         return PianoDataloaderGenerator(
             sequences_size=dataloader_generator_kwargs['sequences_size'],
             transformations=dataloader_generator_kwargs['transformations'])
+    elif dataset.lower() == 'nes':
+        return NESDataloader(
+            sequences_size=dataloader_generator_kwargs['sequences_size'])
     else:
         raise NotImplementedError
 
@@ -32,7 +36,7 @@ def get_data_processor(dataloader_generator, data_processor_type,
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel)
     elif data_processor_type == 'piano':
-        num_events = dataloader_generator.dataset.sequence_size
+        num_events = dataloader_generator.sequences_size
         value2index = dataloader_generator.dataset.value2index
         num_tokens_per_channel = [
             len(value2index[feature])
@@ -49,7 +53,7 @@ def get_data_processor(dataloader_generator, data_processor_type,
 
 
 def get_source_target_data_processor(dataloader_generator, data_processor_type,
-                          data_processor_kwargs):
+                                     data_processor_kwargs):
 
     if data_processor_type == 'bach':
         # TODO not implemented
@@ -76,7 +80,7 @@ def get_positional_embedding(dataloader_generator,
     base_positional_embedding_list = []
     for pe_name, pe_kwargs in positional_embedding_dict.items():
         if pe_name == 'sinusoidal_embedding':
-            num_tokens_max = (dataloader_generator.dataset.sequence_size *
+            num_tokens_max = (dataloader_generator.sequences_size *
                               dataloader_generator.num_channels)
             base_pe: BasePositionalEmbedding = SinusoidalPositionalEmbedding(
                 positional_embedding_size=pe_kwargs[
@@ -99,7 +103,7 @@ def get_positional_embedding(dataloader_generator,
 
 # todo write Decoder base class
 def get_decoder(data_processor, dataloader_generator, positional_embedding,
-                decoder_type, decoder_kwargs, training_phase):
+                sos_embedding, decoder_type, decoder_kwargs, training_phase):
     num_channels_decoder = data_processor.num_channels
     num_events_decoder = data_processor.num_events
 
@@ -108,6 +112,7 @@ def get_decoder(data_processor, dataloader_generator, positional_embedding,
             data_processor=data_processor,
             dataloader_generator=dataloader_generator,
             positional_embedding=positional_embedding,
+            sos_embedding=sos_embedding,
             d_model=decoder_kwargs['d_model'],
             num_decoder_layers=decoder_kwargs['num_decoder_layers'],
             n_head=decoder_kwargs['n_head'],
@@ -123,13 +128,10 @@ def get_decoder(data_processor, dataloader_generator, positional_embedding,
     return decoder
 
 
-def get_encoder_decoder(data_processor, 
-                        dataloader_generator,
+def get_encoder_decoder(data_processor, dataloader_generator,
                         positional_embedding_source,
-                        positional_embedding_target,
-                        sos_embedding,
-                        encoder_decoder_type,
-                        encoder_decoder_kwargs,
+                        positional_embedding_target, sos_embedding,
+                        encoder_decoder_type, encoder_decoder_kwargs,
                         training_phase):
 
     if encoder_decoder_type == 'linear_transformer':
@@ -145,8 +147,10 @@ def get_encoder_decoder(data_processor,
             num_layers_encoder=encoder_decoder_kwargs['num_layers_encoder'],
             n_head_encoder=encoder_decoder_kwargs['n_head_encoder'],
             n_head_decoder=encoder_decoder_kwargs['n_head_decoder'],
-            dim_feedforward_encoder=encoder_decoder_kwargs['dim_feedforward_encoder'],
-            dim_feedforward_decoder=encoder_decoder_kwargs['dim_feedforward_decoder'],
+            dim_feedforward_encoder=encoder_decoder_kwargs[
+                'dim_feedforward_encoder'],
+            dim_feedforward_decoder=encoder_decoder_kwargs[
+                'dim_feedforward_decoder'],
             dropout=encoder_decoder_kwargs['dropout'],
             num_channels_target=data_processor.num_channels_target,
             num_channels_source=data_processor.num_channels_source,
@@ -159,18 +163,16 @@ def get_encoder_decoder(data_processor,
 
     return decoder
 
+
 def get_sos_embedding(dataloader_generator,
-                             sos_embedding_dict) -> SOSEmbedding:
+                      sos_embedding_dict) -> SOSEmbedding:
     base_sos_embedding_list = []
     for sos_name, sos_kwargs in sos_embedding_dict.items():
         if sos_name == 'learnt_sos_embedding':
             base_sos: BaseSOSEmbedding = LearntSOSEmbedding(
-                embedding_size=sos_kwargs[
-                    'embedding_size']
-            )
+                embedding_size=sos_kwargs['embedding_size'])
         else:
             raise NotImplementedError
         base_sos_embedding_list.append(base_sos)
 
-    return SOSEmbedding(
-        base_sos_embedding_list=base_sos_embedding_list)
+    return SOSEmbedding(base_sos_embedding_list=base_sos_embedding_list)

@@ -15,6 +15,7 @@ class CausalEncoder(nn.Module):
                  data_processor: DataProcessor,
                  dataloader_generator: DataloaderGenerator,
                  positional_embedding: PositionalEmbedding,
+                 sos_embedding,
                  d_model,
                  num_decoder_layers,
                  n_head,
@@ -56,18 +57,16 @@ class CausalEncoder(nn.Module):
 
         ######################################################
         # Embeddings
-        self.target_positional_embedding = positional_embedding
-        positional_embedding_size = self.target_positional_embedding.positional_embedding_size
+        self.positional_embedding = positional_embedding
         
-        linear_target_input_size = self.d_model - positional_embedding_size
         self.linear_target = nn.Linear(
-            self.data_processor.embedding_size,
-            linear_target_input_size
-        )
+            self.data_processor.embedding_size +
+            self.positional_embedding.positional_embedding_size,
+            self.d_model)
 
         ########################################################
         # Start of sentence
-        self.sos_target = nn.Parameter(torch.randn((1, 1, self.d_model)))
+        self.sos_embedding = sos_embedding
 
         ######################################################
         self.transformer = LinearTransformerCausalEncoder(
@@ -91,7 +90,7 @@ class CausalEncoder(nn.Module):
     def __repr__(self) -> str:
         return 'CausalEncoder'
 
-    def forward(self, target, h_pe_init=None):
+    def forward(self, target, metadata_dict, h_pe_init=None):
         """
         :param target: sequence of tokens (batch_size, num_events, num_channels)
         :return:
@@ -101,17 +100,16 @@ class CausalEncoder(nn.Module):
         target = self.data_processor.preprocess(target)
         
         target_embedded = self.data_processor.embed(target)
-        target_embedded = self.linear_target(target_embedded)
         target_seq = flatten(target_embedded)
-
-
+        
         # add positional embeddings
-        target_seq, h_pe = self.target_positional_embedding(target_seq, i=0, h=h_pe_init, target=target)
+        target_seq, h_pe = self.positional_embedding(target_seq, i=0, h=h_pe_init, metadata_dict=metadata_dict)
+        target_seq = self.linear_target(target_seq)
+
 
         # shift target_seq by one
         # Pad
-
-        dummy_input_target = self.sos_target.repeat(batch_size, 1, 1)
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
         target_seq = torch.cat(
             [
                 dummy_input_target,
@@ -171,7 +169,7 @@ class CausalEncoder(nn.Module):
                 channel_index=channel_index_input)
             target_embedded = self.linear_target(target_embedded)
             # add positional embeddings
-            target_seq, h_pe = self.target_positional_embedding.forward_step(
+            target_seq, h_pe = self.positional_embedding.forward_step(
                 target_embedded,
                 i=(i - 1),
                 h=h_pe,

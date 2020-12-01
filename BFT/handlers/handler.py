@@ -30,8 +30,8 @@ class Handler:
                                            weight_decay=1e-3)
 
     # ==== Wrappers
-    def forward(self, target, h_pe_init=None):
-        return self.model.forward(target, h_pe_init=h_pe_init)
+    def forward(self, target, metadata_dict, h_pe_init=None):
+        return self.model.forward(target, metadata_dict, h_pe_init=h_pe_init)
     
     def forward_step(self, target, state, i, h_pe):
         return self.model.module.forward_step(target, state, i, h_pe)

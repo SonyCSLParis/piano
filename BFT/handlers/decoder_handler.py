@@ -55,10 +55,14 @@ class DecoderHandler(Handler):
                 # TODO preprocess here
                 x = tensor_dict['x']
 
+            metadata_dict = {
+                'original_sequence': x
+            }
             # ========Train decoder =============
             self.optimizer.zero_grad()
             forward_pass = self.forward(
                 target=x,
+                metadata_dict=metadata_dict,
                 h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
