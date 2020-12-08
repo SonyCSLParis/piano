@@ -150,7 +150,8 @@ def debug():
     print(d)
     notes = d['notes']
     selected_region = d['selected_region']
-    x, (event_start, event_end) = ableton_to_tensor(notes, selected_region)
+    x, (event_start, event_end) = ableton_to_tensor(notes,
+                                                    selected_region)
     original_size = x.size(0)
     # add batch_dim
     global data_processor
@@ -167,6 +168,7 @@ def debug():
     # TODO high pitched notes are discarded
     # TODO tempo
     # TODO send track duration
+    # TODO pb when selection out of bounds
     # add correct size
     x = torch.cat([
         x,
@@ -191,14 +193,19 @@ def debug():
                                     top_k=0)
 
     ableton_notes, track_duration = tensor_to_ableton(
-        output[0, :original_size])
+        output[0, :original_size], 
+        clip_start=d['clip_start']
+        )
 
     print(f'albeton notes: {ableton_notes}')
     d = {
         'id': d['id'],
         'notes': ableton_notes,
         'track_duration': track_duration,
-        'clip_id': d['clip_id']
+        'clip_id': d['clip_id'],
+        'clip_start': d['clip_start'],
+        'clip_end': d['clip_end'],
+        'detail_clip_id': d['detail_clip_id']
     }
     return jsonify(d)
 
@@ -298,11 +305,14 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
     return x, (event_start, event_end)
 
 
-def tensor_to_ableton(tensor):
-    """[summary]
+def tensor_to_ableton(tensor, clip_start):
+    """
+    convert back a tensor to ableton format.
+    Then shift all notes by clip start
 
     Args:
         tensor (num_events, num_channels)):
+        clip_start
     """
     # channels are ['pitch', 'velocity', 'duration', 'time_shift']
     notes = []
@@ -315,7 +325,8 @@ def tensor_to_ableton(tensor):
     timeshifts = torch.FloatTensor(
         [index2value['time_shift'][ts.item()] for ts in tensor[:, 3]])
     time = torch.cumsum(timeshifts, dim=0)
-    time = torch.cat([torch.zeros((1, )), time[:-1]], dim=0) * tempo
+    time = (torch.cat([torch.zeros((1, )), time[:-1]], dim=0) * tempo
+            + clip_start)
     for i in range(num_events):
         note = dict(pitch=index2value['pitch'][tensor[i, 0].item()],
                     start=time[i].item(),

@@ -90,8 +90,8 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
         
-        assert 'original_sequence' in metadata_dict, (
-            'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
+        assert 'original_token' in metadata_dict, (
+            'Dictionnary metadata_dict must contain entry "original_token" in order to compute the elapsed time' 
         )
 
         batch_size = x.size(0)

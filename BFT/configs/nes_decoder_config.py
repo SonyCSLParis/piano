@@ -6,7 +6,7 @@ config = {
 
     # --- Dataloader ---
     'dataloader_generator_kwargs': dict(
-        sequences_size=256,
+        sequences_size=1024,
     ),  # Can be different from the encoder's data loader
 
     # --- DataProcessor ---
@@ -54,7 +54,7 @@ config = {
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  6,
+    'batch_size':                  2,
     'num_batches':                 256,
     'num_epochs':                  2000,
 

@@ -17,8 +17,8 @@ class DecoderHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
         super().__init__(model=model,
-                          model_dir=model_dir,
-                          dataloader_generator=dataloader_generator)
+                         model_dir=model_dir,
+                         dataloader_generator=dataloader_generator)
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:
@@ -47,7 +47,7 @@ class DecoderHandler(Handler):
         iterator = enumerate(islice(data_loader, num_batches))
         if is_main_process():
             iterator = tqdm(iterator, ncols=80)
-            
+
         for sample_id, tensor_dict in iterator:
 
             # ==========================
@@ -55,15 +55,12 @@ class DecoderHandler(Handler):
                 # TODO preprocess here
                 x = tensor_dict['x']
 
-            metadata_dict = {
-                'original_sequence': x
-            }
+            metadata_dict = {'original_sequence': x}
             # ========Train decoder =============
             self.optimizer.zero_grad()
-            forward_pass = self.forward(
-                target=x,
-                metadata_dict=metadata_dict,
-                h_pe_init=h_pe_init)
+            forward_pass = self.forward(target=x,
+                                        metadata_dict=metadata_dict,
+                                        h_pe_init=h_pe_init)
             loss = forward_pass['loss']
             # h_pe_init = forward_pass['h_pe'].detach()
 
@@ -87,8 +84,9 @@ class DecoderHandler(Handler):
 
         # renormalize monitored quantities
         for key, value in means.items():
-            means[key] = all_reduce_scalar(value, average=True) / (sample_id + 1)
-        
+            means[key] = all_reduce_scalar(value,
+                                           average=True) / (sample_id + 1)
+
         # means = {
         #     key: all_reduce_scalar(value, average=True) / (sample_id + 1)
         #     for key, value in means.items()
@@ -142,7 +140,7 @@ class DecoderHandler(Handler):
                     # update generated sequence
                     for batch_index in range(batch_size):
                         new_pitch_index = np.random.choice(np.arange(
-                            self.num_tokens_per_channel_target[channel_index]),
+                            self.num_tokens_per_channel[channel_index]),
                                                            p=p[batch_index])
                         x[batch_index, event_index,
                           channel_index] = int(new_pitch_index)
@@ -167,7 +165,7 @@ class DecoderHandler(Handler):
 
         return scores
 
-    def generate(self, temperature, batch_size=1, top_k=0, top_p=1.):
+    def generate(self, metadata_dict, temperature, batch_size=1, top_k=0, top_p=1.):
         assert self.recurrent
         self.eval()
         # num_events = 4 * 4 * 24
@@ -177,8 +175,10 @@ class DecoderHandler(Handler):
 
         x = torch.zeros(batch_size, num_events,
                         self.num_channels_target).long()
+        
+        # needed for sos_embedding
+        metadata_dict['original_sequence'] = x
         with torch.no_grad():
-
             # init
             xi = torch.zeros_like(x)[:, 0, 0]
             state = None
@@ -189,10 +189,12 @@ class DecoderHandler(Handler):
                 for channel_index in range(self.num_channels_target):
                     i = event_index * self.num_channels_target + channel_index
 
-                    forward_pass = self.forward_step(xi,
-                                                     state=state,
-                                                     i=i,
-                                                     h_pe=h_pe)
+                    forward_pass = self.forward_step(
+                        xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
@@ -201,10 +203,14 @@ class DecoderHandler(Handler):
                     # TODO separate method in dataprocessor?
                     # # exclude non note symbols:
                     # exclude_symbols = ['START', 'END', 'XX']
-                    # for sym in exclude_symbols:
-                    #     sym_index = self.dataloader_generator.dataset.note2index_dicts[
-                    #         channel_index][sym]
-                    #     logits[:, sym_index] = -np.inf
+                    exclude_symbols = ['END', 'XX']
+                    for sym in exclude_symbols:
+                        # TODO unify
+                        # sym_index = self.dataloader_generator.dataset.note2index_dicts[
+                        #     channel_index][sym]
+                        sym_index = self.dataloader_generator.dataset.value2index[
+                            self.dataloader_generator.features[channel_index]][sym]
+                        logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
                     for logit in logits:

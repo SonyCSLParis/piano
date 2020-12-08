@@ -17,8 +17,11 @@ class NESDataloader(DataloaderGenerator):
         super(NESDataloader, self).__init__(dataset=dataset)
 
     def write(self, x, path):
-        # TODO
-        raise NotImplementedError
+        tensor_dict = {feature: x[:, feature_index] for feature_index, feature in
+                     enumerate(self.features)}
+        score = self.dataset.generate_midi(tensor_dict)
+        score.write(f'{path}.mid')
+        print(f'File {path}.mid written')
 
     def get_elapsed_time(self, x):
         """

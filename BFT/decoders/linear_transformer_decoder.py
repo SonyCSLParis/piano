@@ -149,7 +149,7 @@ class CausalEncoder(nn.Module):
             }
         }
 
-    def forward_step(self, target, state, i, h_pe):
+    def forward_step(self, target, metadata_dict, state, i, h_pe):
         """
         if i == 0, target is not used: SOS instead
         :param target: sequence of tokens (batch_size,)
@@ -160,20 +160,23 @@ class CausalEncoder(nn.Module):
         """
         # deal with the SOS token embedding
         if i == 0:
-            target_seq = self.sos_target.repeat(target.size(0), 1, 1)[:, 0, :]
+            target_seq = self.sos_embedding(metadata_dict)
         else:
             channel_index_input = (i - 1) % self.num_channels_target
             target = self.data_processor.preprocess(target)
             target_embedded = self.data_processor.embed_step(
                 target,
                 channel_index=channel_index_input)
-            target_embedded = self.linear_target(target_embedded)
+            
             # add positional embeddings
+            metadata_dict['original_token'] = target
             target_seq, h_pe = self.positional_embedding.forward_step(
                 target_embedded,
+                metadata_dict=metadata_dict,
                 i=(i - 1),
                 h=h_pe,
-                target=target)
+                )
+            target_seq = self.linear_target(target_seq)
 
         output, state = self.transformer.forward_step(
             target_seq, state=state

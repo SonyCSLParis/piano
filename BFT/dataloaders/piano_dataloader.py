@@ -73,7 +73,7 @@ class PianoDataloaderGenerator(DataloaderGenerator):
                      enumerate(self.features)}
         score = self.dataset.tensor_to_score(sequences, fill_features=None)
         score.write(f'{path}.mid')
-        return torch
+        print(f'File {path}.mid written')
     
     def get_elapsed_time(self, x):
         """
