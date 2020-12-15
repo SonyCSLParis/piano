@@ -72,8 +72,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
          model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-    # os.environ['MASTER_PORT'] = '12356'
+    # os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
     # os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
@@ -152,8 +152,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     scores = decoder_handler.generate(
         metadata_dict={},
         temperature=1.,
-                              batch_size=3,
-                              top_p=0.95,
+                              batch_size=10,
+                              top_p=0.9,
                               top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
