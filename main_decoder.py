@@ -15,7 +15,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from BFT.data_processors.data_processor import DataProcessor
-from BFT.getters import get_dataloader_generator, get_data_processor, get_decoder, get_positional_embedding
+from BFT.getters import get_dataloader_generator, get_data_processor, get_decoder, get_positional_embedding, get_sos_embedding
 
 
 @click.command()
@@ -73,9 +73,9 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
-    # os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
-    os.environ['MASTER_PORT'] = '12358'
+    # os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -97,9 +97,16 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         dataloader_generator=dataloader_generator,
         positional_embedding_dict=config['positional_embedding_dict']
     )
+    
+    # sos embedding
+    sos_embedding = get_sos_embedding(
+        dataloader_generator=dataloader_generator,
+        sos_embedding_dict=config['sos_embedding_dict'])
+    
     decoder = get_decoder(data_processor=data_processor,
                           dataloader_generator=dataloader_generator,
                           positional_embedding=positional_embedding,
+                          sos_embedding=sos_embedding,
                           decoder_type=config['decoder_type'],
                           decoder_kwargs=config['decoder_kwargs'],
                           training_phase=train)
@@ -142,9 +149,11 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     #                                      top_p=0.9,
     #                                      top_k=0,
     #                                      midi_file='inputs/Test_X_1.mid')
-    scores = decoder_handler.generate(temperature=1.,
-                              batch_size=3,
-                              top_p=0.95,
+    scores = decoder_handler.generate(
+        metadata_dict={},
+        temperature=1.,
+                              batch_size=10,
+                              top_p=0.92,
                               top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')

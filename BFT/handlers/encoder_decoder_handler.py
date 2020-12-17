@@ -1,12 +1,12 @@
 from BFT.handlers.handler import Handler
 from torch.distributed.distributed_c10d import get_world_size
 from BFT.dataloaders.dataloader import DataloaderGenerator
-from BFT.utils import all_reduce_scalar, dict_pretty_print, display_monitored_quantities, is_main_process, to_numpy, top_k_top_p_filtering
+from BFT.utils import all_reduce_scalar, dict_pretty_print, display_monitored_quantities, flatten, is_main_process, to_numpy, top_k_top_p_filtering
 import torch
 import os
 from tqdm import tqdm
 from itertools import islice
-from datetime import datetime
+from datetime import datetime, time
 import numpy as np
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
@@ -27,6 +27,13 @@ class EncoderDecoderHandler(Handler):
                                   target,
                                   metadata_dict=metadata_dict,
                                   h_pe_init=h_pe_init)
+        
+    def forward_with_states(self, memory, target, metadata_dict, h_pe_init=None):
+        return self.model.module.forward_memory_target_with_states(
+            memory,
+                                  target,
+                                  metadata_dict=metadata_dict,
+                                  h_pe_init=h_pe_init)
 
     def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
         return self.model.module.forward_step(memory, target, metadata_dict,
@@ -38,6 +45,42 @@ class EncoderDecoderHandler(Handler):
     def mask_source(self, source, masked_positions):
         return self.model.module.data_processor._mask_source(
             x=source, masked_positions=masked_positions)
+        
+    @property
+    def num_tokens_per_channel_target(self):
+        return self.model.module.data_processor.num_tokens_per_channel_target
+    
+    @property
+    def num_channels_target(self):
+        return self.model.module.data_processor.num_channels_target
+
+        
+    def load(self, early_stopped):
+        map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
+        print(f'Loading models {self.__repr__()}')
+        if early_stopped:
+            print('Load early stopped model')
+            model_dir = f'{self.model_dir}/early_stopped'
+        else:
+            print('Load over-fitted model')
+            model_dir = f'{self.model_dir}/overfitted'
+            
+        state_dict = torch.load(f'{model_dir}/model',
+                                map_location=map_location)
+        
+        # TODO, handle this properly
+        # copy transformer_with_states during inference
+        
+        transformer_with_states_dict = {}
+        for k, v in state_dict.items():
+            if 'transformer' in k:
+                new_key = k.replace('decoder.transformer', 'decoder.transformer_with_states')
+                transformer_with_states_dict[new_key] = v
+        state_dict.update(transformer_with_states_dict)
+
+        self.model.load_state_dict(
+            state_dict=state_dict
+            )
 
     # ==== Training methods
     def epoch(
@@ -130,6 +173,8 @@ class EncoderDecoderHandler(Handler):
 
         # TODO hard coded value
         num_events = 1024
+        
+        # TODO URGENT ORIGINAL TOKEN IN METADATA_DICT
 
         x = torch.zeros(batch_size, num_events,
                         self.num_channels_target).long().to(source.device)
@@ -204,6 +249,88 @@ class EncoderDecoderHandler(Handler):
         ###############################
 
         return scores
+    
+    
+    def generate_region(self,
+                 source,
+                 metadata_dict,
+                 temperature,
+                 start_event,
+                 end_event,
+                 top_k=0,
+                 top_p=1.):
+        """Generate using the EncoderDecoder conditionned on source
+
+        Args:
+            source (LongTensor): (batch_size, num_events_source, num_channels_source)
+            temperature ([type]): [description]
+            start_event:
+            end_event:            
+            batch_size (int, optional): [description]. Defaults to 1.
+            top_k (int, optional): [description]. Defaults to 0.
+            top_p ([type], optional): [description]. Defaults to 1..
+
+        Returns:
+            [type]: the inpainted region (batch_size, end_event - start_event, num_channels)
+        """
+        assert self.recurrent
+        self.eval()
+        batch_size = source.size(0)
+        
+        num_events = end_event - start_event
+
+
+        x = torch.zeros(batch_size, num_events,
+                        self.num_channels_target).long().to(source.device)
+        with torch.no_grad():
+
+            # init
+            xi = torch.zeros_like(x)[:, 0, 0]
+            state = None
+            h_pe = None
+
+            # compute memory only once
+            memory = self.forward_source(source, metadata_dict)
+
+            # i corresponds to the position of the token BEING generated
+            for event_index in range(start_event, end_event):
+                for channel_index in range(self.num_channels_target):
+                    i = event_index * self.num_channels_target + channel_index
+
+                    forward_pass = self.forward_step(
+                        memory=memory,
+                        target=xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
+                    weights = forward_pass['weights']
+
+                    logits = weights / temperature
+
+                    filtered_logits = []
+                    for logit in logits:
+                        filter_logit = top_k_top_p_filtering(logit,
+                                                             top_k=top_k,
+                                                             top_p=top_p)
+                        filtered_logits.append(filter_logit)
+                    filtered_logits = torch.stack(filtered_logits, dim=0)
+                    # Sample from the filtered distribution
+                    p = to_numpy(torch.softmax(filtered_logits, dim=-1))
+
+                    # update generated sequence
+                    for batch_index in range(batch_size):
+                        new_pitch_index = np.random.choice(np.arange(
+                            self.num_tokens_per_channel_target[channel_index]),
+                                                           p=p[batch_index])
+                        x[batch_index, event_index - start_event,
+                          channel_index] = int(new_pitch_index)
+
+                    # update
+                    xi = x[:, event_index - start_event, channel_index]
+                    h_pe = forward_pass['h_pe']
+                    state = forward_pass['state']
+        return x
 
     def inpaint(self, x, masked_positions, temperature=1.0, top_p=1., top_k=0):
         """Regenerated only tokens from x specified by masked_positions
@@ -220,6 +347,151 @@ class EncoderDecoderHandler(Handler):
                              temperature=temperature,
                              top_k=top_k,
                              top_p=top_p)
+        
+    def inpaint_region(self, x, start_event, end_event,
+                       masked_positions, 
+                       temperature=1.0, top_p=1., top_k=0):
+        """Regenerated only tokens from x specified by masked_positions between start_event and end_event
+
+        Args:
+            x (LongTensor): (batch_size, num_events, num_channels)
+            masked_positions (BoolTensor): same as x
+        """
+        source, _ = self.mask_source(x, masked_positions)
+        metadata_dict = dict(original_sequence=x,
+                             masked_positions=masked_positions)
+        region =  self.generate_region(
+            source,
+                             metadata_dict,
+                             start_event=start_event,
+                             end_event=end_event,
+                             temperature=temperature,
+                             top_k=top_k,
+                             top_p=top_p)
+        
+        output = torch.cat(
+            [
+                x[:, :start_event],
+                region,
+                x[:, end_event:]
+            ], dim=1
+        )
+        # TODO save here
+        beginning = x[:, :start_event]
+        return output, region, beginning
+
+    def inpaint_region_optimized(self, x, start_event, end_event,
+                       masked_positions, 
+                       temperature=1.0, top_p=1., top_k=0):
+        """Regenerated only tokens from x specified by masked_positions between start_event and end_event
+
+        Args:
+            x (LongTensor): (batch_size, num_events, num_channels)
+            masked_positions (BoolTensor): same as x
+        """
+        self.eval()
+        assert self.recurrent        
+        source, _ = self.mask_source(x, masked_positions)
+        metadata_dict = dict(original_sequence=x,
+                             masked_positions=masked_positions)
+        
+        with torch.no_grad():
+            # init
+            state = None
+            h_pe = None
+            xi = torch.zeros_like(x)[:, 0, 0]
+                        
+            # # compute memory only once
+            memory = self.forward_source(source, metadata_dict)
+            
+            # compute state for autoregressive generation
+            def extract_state_from_parallel_state(state_parallel, i):
+                extracted_state = []
+                for state in state_parallel:
+                    # iterate on layers
+
+                    # self attention
+                    self_atn = state[0]
+                    # extract -ith element on S and Z
+                    self_atn_x = [self_atn[0][:, i],
+                                    self_atn[1][:, i]]
+                            
+                    
+                    
+                    # cross attention (DIAGONAL ONLY)
+                    cross_atn = state[1]
+                    cross_atn_x = cross_atn[i].item()
+                    
+                    new_state = [
+                        self_atn_x, cross_atn_x
+                    ]
+                    extracted_state.append(new_state)
+                return extracted_state
+                                    
+            weights, _, state_parallel = self.forward_with_states(
+                        memory=memory,
+                        target=x,
+                        metadata_dict=metadata_dict
+                    )
+            
+            # TODO case start_event = 0!
+            state = extract_state_from_parallel_state(
+                state_parallel, start_event * self.num_channels_target - 1
+            )
+            xi = x[:, start_event - 1, 3]
+            
+            # compute h_pe
+            batch_size, num_events_target, num_channels_source = x.size()
+            target_embedded = self.model.module.data_processor.embed_target(x)
+
+            # add positional embeddings
+            target_seq = flatten(target_embedded)[:, : self.num_channels_target * start_event]
+            metadata_dict_sliced = {k: v[:, :start_event] for 
+                                    k, v in metadata_dict.items()}
+            _, h_pe = self.model.module.positional_embedding_target(
+            target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
+
+            # i corresponds to the position of the token BEING generated
+            for event_index in range(start_event, end_event):
+                for channel_index in range(self.num_channels_target):
+                    i = event_index * self.num_channels_target + channel_index
+
+                    forward_pass = self.forward_step(
+                        memory=memory,
+                        target=xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
+                    weights = forward_pass['weights']
+
+                    logits = weights / temperature
+
+                    filtered_logits = []
+                    for logit in logits:
+                        filter_logit = top_k_top_p_filtering(logit,
+                                                             top_k=top_k,
+                                                             top_p=top_p)
+                        filtered_logits.append(filter_logit)
+                    filtered_logits = torch.stack(filtered_logits, dim=0)
+                    # Sample from the filtered distribution
+                    p = to_numpy(torch.softmax(filtered_logits, dim=-1))
+                    
+
+                    # update generated sequence
+                    for batch_index in range(batch_size):
+                        new_pitch_index = np.random.choice(np.arange(
+                            self.num_tokens_per_channel_target[channel_index]),
+                                                           p=p[batch_index])
+                        x[batch_index, event_index,
+                          channel_index] = int(new_pitch_index)
+
+                    # update
+                    xi = x[:, event_index, channel_index]
+                    h_pe = forward_pass['h_pe']
+                    state = forward_pass['state']
+        # TODO case where we generate only slices
+        return x.detach().cpu()
 
     def plot_attention(self, attentions_list, timestamp, name):
         """
@@ -400,5 +672,162 @@ class EncoderDecoderHandler(Handler):
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
+
+        return scores
+    
+    
+    def test_decoder_with_states(self,                                 
+                 source,
+                 metadata_dict,
+                 temperature,
+                 top_k=0,
+                 top_p=1.):
+        """Generate using the EncoderDecoder conditionned on source
+
+        Args:
+            source (LongTensor): (batch_size, num_events_source, num_channels_source)
+            temperature ([type]): [description]
+            batch_size (int, optional): [description]. Defaults to 1.
+            top_k (int, optional): [description]. Defaults to 0.
+            top_p ([type], optional): [description]. Defaults to 1..
+
+        Returns:
+            [type]: [description]
+        """
+        assert self.recurrent
+        self.eval()
+        batch_size = source.size(0)
+
+        # TODO hard coded value
+        num_events = 1024
+        
+        import timeit
+        start = timeit.default_timer()
+
+        x = source.detach().to(source.device).clone()
+        with torch.no_grad():
+            # init
+
+            state = None
+            h_pe = None
+            xi = torch.zeros_like(x)[:, 0, 0]
+            
+            
+            # # compute memory only once
+            memory = self.forward_source(source, metadata_dict)
+            
+            # compute state for autoregressive generation
+            def extract_state_from_parallel_state(state_parallel, i):
+                extracted_state = []
+                for state in state_parallel:
+                    # iterate on layers
+
+                    # self attention
+                    self_atn = state[0]
+                    # extract -ith element on S and Z
+                    self_atn_x = [self_atn[0][:, i],
+                                    self_atn[1][:, i]]
+                            
+                    
+                    
+                    # cross attention (DIAGONAL ONLY)
+                    cross_atn = state[1]
+                    cross_atn_x = cross_atn[i].item()
+                    
+                    new_state = [
+                        self_atn_x, cross_atn_x
+                    ]
+                    extracted_state.append(new_state)
+                return extracted_state
+                                    
+            weights, _, state_parallel = self.forward_with_states(
+                        memory=memory,
+                        target=x,
+                        metadata_dict=metadata_dict
+                    )
+                    
+            state = extract_state_from_parallel_state(
+                state_parallel, 399
+            )
+            xi = x[:, 99, 3]
+            
+            # compute h_pe
+            batch_size, num_events_target, num_channels_source = x.size()
+            target_embedded = self.model.module.data_processor.embed_target(x)
+
+            # add positional embeddings
+            target_seq = flatten(target_embedded)[:, :4 * 100]
+            metadata_dict_sliced = {k: v[:, :100] for 
+                                    k, v in metadata_dict.items()}
+            _, h_pe = self.model.module.positional_embedding_target(
+            target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
+
+            # i corresponds to the position of the token BEING generated
+            for event_index in range(100, 200):
+                for channel_index in range(self.num_channels_target):
+                    i = event_index * self.num_channels_target + channel_index
+
+                    forward_pass = self.forward_step(
+                        memory=memory,
+                        target=xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
+                    weights = forward_pass['weights']
+
+                    logits = weights / temperature
+
+                    filtered_logits = []
+                    for logit in logits:
+                        filter_logit = top_k_top_p_filtering(logit,
+                                                             top_k=top_k,
+                                                             top_p=top_p)
+                        filtered_logits.append(filter_logit)
+                    filtered_logits = torch.stack(filtered_logits, dim=0)
+                    # Sample from the filtered distribution
+                    p = to_numpy(torch.softmax(filtered_logits, dim=-1))
+                    
+
+                    # update generated sequence
+                    for batch_index in range(batch_size):
+                        new_pitch_index = np.random.choice(np.arange(
+                            self.num_tokens_per_channel_target[channel_index]),
+                                                           p=p[batch_index])
+                        x[batch_index, event_index,
+                          channel_index] = int(new_pitch_index)
+
+                    # update
+                    xi = x[:, event_index, channel_index]
+                    h_pe = forward_pass['h_pe']
+                    state = forward_pass['state']
+                
+        stop = timeit.default_timer()
+        print(f'Time {stop - start}s')
+        # add original
+        x = torch.cat([
+            source.cpu(),
+            x.cpu()
+        ], dim=0)
+        # to score
+        original_and_reconstruction = self.data_processor.postprocess(x.cpu())
+
+        ###############################
+        # Saving
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+        if not os.path.exists(f'{self.model_dir}/generations'):
+            os.mkdir(f'{self.model_dir}/generations')
+
+        # Write scores
+        scores = []
+        for k, tensor_score in enumerate(original_and_reconstruction):
+            path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}'
+            # TODO fix write signature
+            scores.append(
+                self.dataloader_generator.write(tensor_score,
+                                                path_no_extension))
+            # scores.append(self.dataloader_generator.write(tensor_score.unsqueeze(0),
+            #                                               path_no_extension))
+        ###############################
 
         return scores

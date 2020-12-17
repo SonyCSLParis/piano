@@ -30,11 +30,11 @@ class Handler:
                                            weight_decay=1e-3)
 
     # ==== Wrappers
-    def forward(self, target, h_pe_init=None):
-        return self.model.forward(target, h_pe_init=h_pe_init)
+    def forward(self, target, metadata_dict, h_pe_init=None):
+        return self.model.forward(target, metadata_dict, h_pe_init=h_pe_init)
     
-    def forward_step(self, target, state, i, h_pe):
-        return self.model.module.forward_step(target, state, i, h_pe)
+    def forward_step(self, target, metadata_dict, state, i, h_pe):
+        return self.model.module.forward_step(target, metadata_dict, state, i, h_pe)
 
     def train(self):
         self.model.train()
@@ -52,11 +52,11 @@ class Handler:
     
     @property
     def num_tokens_per_channel_target(self):
-        return self.model.module.data_processor.num_tokens_per_channel_target
+        return self.model.module.data_processor.num_tokens_per_channel
     
     @property
     def num_channels_target(self):
-        return self.model.module.num_channels_target
+        return self.model.module.data_processor.num_channels
 
     @property
     def data_processor(self):
@@ -88,8 +88,23 @@ class Handler:
         else:
             print('Load over-fitted model')
             model_dir = f'{self.model_dir}/overfitted'
+            
+        state_dict = torch.load(f'{model_dir}/model',
+                                map_location=map_location)
+        
+        # TODO, Remove?!
+        # # copy transformer_with_states during inference
+        
+        # transformer_with_states_dict = {}
+        # for k, v in state_dict.items():
+        #     if 'transformer' in k:
+        #         new_key = k.replace('decoder.transformer', 'decoder.transformer_with_states')
+        #         transformer_with_states_dict[new_key] = v
+        # state_dict.update(transformer_with_states_dict)
+
         self.model.load_state_dict(
-            torch.load(f'{model_dir}/model', map_location=map_location))
+            state_dict=state_dict
+            )
 
     def plot(self, epoch_id, monitored_quantities_train,
              monitored_quantities_val) -> None:

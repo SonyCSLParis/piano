@@ -174,6 +174,47 @@ class EncoderDecoder(nn.Module):
             for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
         ]
         return weights_per_category, h_pe_target
+    
+    def forward_memory_target_with_states(self,
+                              memory,
+                              target,
+                              metadata_dict,
+                              h_pe_init=None):
+        """Call decoder on target conditionned on memory (output of the encoder)
+
+        Args:
+            memory (FloatTensor): (batch_size, num_tokens_source, d_model_encoder)
+            target (LongTensor): [description]
+            h_pe_init ([type], optional): [description]. Defaults to None.
+
+        Returns:
+            [type]: [description]
+        """
+        batch_size, num_events_target, num_channels_source = target.size()
+        target_embedded = self.data_processor.embed_target(target)
+
+        # add positional embeddings
+        target_seq = flatten(target_embedded)
+        target_seq, h_pe_target = self.positional_embedding_target(
+            target_seq, i=0, h=h_pe_init, metadata_dict=metadata_dict)
+        target_seq = self.linear_target(target_seq)
+
+        # shift target_seq by one
+        # Pad
+        # sos_embedding is (batch_size, d_model_decoder)
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
+        target_seq = torch.cat([dummy_input_target, target_seq], dim=1)
+        target_seq = target_seq[:, :-1]
+
+        output, states = self.decoder.forward_with_states(memory=memory, target=target_seq)
+
+        output = output.view(batch_size, -1, self.num_channels_target,
+                             self.d_model)
+        weights_per_category = [
+            pre_softmax(t[:, :, 0, :])
+            for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
+        ]
+        return weights_per_category, h_pe_target, states
 
     def forward(self, source, target, metadata_dict, h_pe_init=None):
         """
@@ -208,6 +249,7 @@ class EncoderDecoder(nn.Module):
                 'loss': loss.item()
             }
         }
+
 
     def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
         """

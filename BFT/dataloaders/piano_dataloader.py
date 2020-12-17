@@ -10,16 +10,6 @@ class PianoDataloaderGenerator(DataloaderGenerator):
                  sequences_size,
                  transformations,
                  *args, **kwargs):
-        """
-        :param num_tokens_per_block:
-        :param num_blocks_left:
-        :param num_blocks_right:
-        :param num_negative_samples:
-        :param negative_sampling_method:
-        :param args:
-        :param kwargs:
-        """
-
         legacy = True
 
         # corpus_it_gen = MaestroIteratorGenerator(
@@ -41,10 +31,15 @@ class PianoDataloaderGenerator(DataloaderGenerator):
             transformations=transformations,
             different_time_table_ts_duration=not legacy
         )
+        
         super(PianoDataloaderGenerator, self).__init__(dataset=dataset)
         self.features = ['pitch', 'velocity', 'duration', 'time_shift']
         self.num_channels = 4
 
+    @property
+    def sequences_size(self):
+        return self.dataset.sequence_size
+    
     def dataloaders(self, batch_size, num_workers=0, shuffle_train=True,
                     shuffle_val=False):
         dataloaders = self.dataset.data_loaders(batch_size,
@@ -78,7 +73,7 @@ class PianoDataloaderGenerator(DataloaderGenerator):
                      enumerate(self.features)}
         score = self.dataset.tensor_to_score(sequences, fill_features=None)
         score.write(f'{path}.mid')
-        return torch
+        print(f'File {path}.mid written')
     
     def get_elapsed_time(self, x):
         """
