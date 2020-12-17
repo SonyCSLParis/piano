@@ -146,14 +146,12 @@ def inpaint():
 @app.route('/test', methods=['GET', 'POST'])
 def debug():
     d = json.loads(request.data)
-
-    print(d)    
-    
+    print(d)
+    num_max_generated_events = 15
     notes = d['notes']
     selected_region = d['selected_region']
-    x, (event_start, event_end) = ableton_to_tensor(notes,
-                                                    selected_region)
-    
+    x, (event_start, event_end) = ableton_to_tensor(notes, selected_region)
+
     original_size = x.size(0)
     # add batch_dim
     global data_processor
@@ -180,38 +178,43 @@ def debug():
                   dim=1)
 
     masked_positions = torch.zeros_like(x).long()
-    masked_positions[:, event_start:event_end] = 1
+    # TODO remove mask end
+    # masked_positions[:, event_start:event_end] = 1
+    masked_positions[:, event_start:] = 1
 
-    # TODO we are forced to do this
-    # event_start = 0
 
     global handler
     print(f'event: {event_start, event_end}')
-    output = handler.inpaint_region_optimized(x=x,
-                                    masked_positions=masked_positions,
-                                    start_event=event_start,
-                                    end_event=event_end,
-                                    temperature=1.,
-                                    top_p=0.95,
-                                    top_k=0)
+    if event_start + num_max_generated_events >= event_end:
+        done = True
+        event_end_region = event_end
+    else:
+        done = False
+        event_end_region = event_start + num_max_generated_events
+    output = handler.inpaint_region_optimized(
+        x=x,
+        masked_positions=masked_positions,
+        start_event=event_start,
+        end_event=event_end_region,
+        temperature=1.,
+        top_p=0.95,
+        top_k=0)
     # output = x.detach().cpu()
-    
-    
+
     ableton_notes, ableton_notes_region, track_duration = tensor_to_ableton(
-        output[0, :original_size], 
+        output[0, :original_size],
         clip_start=d['clip_start'],
         start_event=event_start,
-        end_event=event_end
-        )
-    
+        end_event=event_end_region)
+
     # _, region_start = tensor_to_ableton(
     #     beginning[0],
     #     clip_start=d['clip_start']
     # )
-    
+
     # region_ableton_notes, _ = tensor_to_ableton(
     #     region[0],    clip_start=region_start
-        
+
     # )
 
     print(f'albeton notes: {ableton_notes}')
@@ -220,6 +223,9 @@ def debug():
         'id': d['id'],
         'notes': ableton_notes,
         'track_duration': track_duration,
+        'done': done,
+        'next_event_start': event_end_region,
+        'next_event_end': event_end,
         'selected_region': selected_region,
         'notes_region': ableton_notes_region,
         'clip_id': d['clip_id'],
@@ -230,6 +236,151 @@ def debug():
     return jsonify(d)
 
 
+@app.route('/continue', methods=['GET', 'POST'])
+def update():
+    d = json.loads(request.data)
+    print(d)
+    num_max_generated_events = 30
+    json_notes = d['notes']
+    x = json_to_tensor(json_notes)
+    event_start = d['next_event_start']
+    event_end = d['next_event_end']
+
+    original_size = x.size(0)
+    # add batch_dim
+    global data_processor
+    # TODO different number of batches?
+    num_examples = 1
+    x = x.unsqueeze(0).repeat(num_examples, 1, 1)
+    _, x, _ = data_processor.preprocess(x)
+
+    # TODO case where x is bigger than 1024
+    # TODO add num_notes
+    # TODO exclude pad and start symbols
+    # TODO PAD BEFORE
+    # TODO compute state before calling inpaint_region
+    # TODO high pitched notes are discarded
+    # TODO tempo
+    # TODO send track duration
+    # TODO pb when selection out of bounds
+    # TODO not zeros after
+    # add correct size
+    x = torch.cat([
+        x,
+        torch.zeros(num_examples, 1024 - x.size(1), 4).long().to(x.device)
+    ],
+                  dim=1)
+
+    masked_positions = torch.zeros_like(x).long()
+    # TODO remove mask end
+    # masked_positions[:, event_start:event_end] = 1
+    masked_positions[:, event_start:] = 1
+    # masked_positions[:, event_start:event_end] = 1
+
+
+    global handler
+    print(f'event: {event_start, event_end}')
+    if event_start + num_max_generated_events >= event_end:
+        done = True
+        event_end_region = event_end
+    else:
+        done = False
+        event_end_region = event_start + num_max_generated_events
+    output = handler.inpaint_region_optimized(
+        x=x,
+        masked_positions=masked_positions,
+        start_event=event_start,
+        end_event=event_end_region,
+        temperature=1.,
+        top_p=0.95,
+        top_k=0)
+    # output = x.detach().cpu()
+
+    ableton_notes, ableton_notes_region, track_duration = tensor_to_ableton(
+        output[0, :original_size],
+        clip_start=d['clip_start'],
+        start_event=event_start,
+        end_event=event_end_region)
+
+    # _, region_start = tensor_to_ableton(
+    #     beginning[0],
+    #     clip_start=d['clip_start']
+    # )
+
+    # region_ableton_notes, _ = tensor_to_ableton(
+    #     region[0],    clip_start=region_start
+
+    # )
+
+    print(f'albeton notes: {ableton_notes}')
+    print(f'region start: {ableton_notes_region}')
+    d = {
+        'id': d['id'],
+        'notes': ableton_notes,
+        'track_duration': track_duration,
+        'done': done,
+        'next_event_start': event_end_region,
+        'next_event_end': event_end,
+        'notes_region': ableton_notes_region,
+        'clip_id': d['clip_id'],
+        'clip_start': d['clip_start'],
+        'clip_end': d['clip_end'],
+        'detail_clip_id': d['detail_clip_id']
+    }
+    return jsonify(d)
+
+def json_to_tensor(json_note_list):
+    d = {
+        'pitch': [],
+        'time': [],
+        'duration': [],
+        'velocity': [],
+        'muted': [],
+    }
+    # pitch time duration velocity muted
+    
+    for n in json_note_list:
+        for k, v in n.items():
+            d[k].append(v)
+
+
+    # we now have to sort
+    l = [[p, t, d, v] for p, t, d, v in zip(d['pitch'], d['time'],
+                                            d['duration'], d['velocity'])]
+
+    l = sorted(l, key=lambda x: (x[1], -x[0]))
+
+    d = dict(pitch=torch.LongTensor([x[0] for x in l]),
+             time=torch.FloatTensor([x[1] for x in l]),
+             duration=torch.FloatTensor([max(float(x[2]), 0.05) for x in l]),
+             velocity=torch.LongTensor([x[3] for x in l]))
+    # TODO remove debug
+    print(f'Max pitch: {d["pitch"].max()}')
+    
+    # multiply by tempo
+    tempo = 0.5  # 120 bpm
+    # tempo = 1  # absolute timing?
+    d['time'] = d['time'] * tempo
+    d['duration'] = d['duration'] * tempo
+
+    # compute time_shift
+    d['time_shift'] = torch.cat(
+        [d['time'][1:] - d['time'][:-1],
+         torch.zeros(1, )], dim=0)
+
+    global handler
+
+    # to numpy :(
+    d = {k: t.numpy() for k, t in d.items()}
+    sequence_dict = handler.dataloader_generator.dataset.tokenize(d)
+    # to pytorch :)
+    sequence_dict = {k: torch.LongTensor(t) for k, t in sequence_dict.items()}
+
+    x = torch.stack(
+        [sequence_dict[e] for e in handler.dataloader_generator.features],
+        dim=-1).long()
+    return x
+
 def ableton_to_tensor(ableton_note_list, selected_region=None):
     d = {
         'pitch': [],
@@ -239,7 +390,7 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
         'muted': [],
     }
     mod = -1
-    
+
     # Todo remove debug
     flag = False
     i = 0
@@ -251,7 +402,7 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
             flag = True
             i += 1
     print(f'total: {i}')
-            
+
     # pitch time duration velocity muted
     ableton_features = ['pitch', 'time', 'duration', 'velocity', 'muted']
 
@@ -283,8 +434,7 @@ def ableton_to_tensor(ableton_note_list, selected_region=None):
              velocity=torch.LongTensor([x[3] for x in l]))
     # TODO remove debug
     print(f'Max pitch: {d["pitch"].max()}')
-    
-    
+
     # compute start_event, end_event
     epsilon = 1e-4
     if selected_region is not None:
@@ -363,11 +513,11 @@ def tensor_to_ableton(tensor, clip_start, start_event, end_event):
     timeshifts = torch.FloatTensor(
         [index2value['time_shift'][ts.item()] for ts in tensor[:, 3]])
     time = torch.cumsum(timeshifts, dim=0)
-    time = (torch.cat([torch.zeros((1, )), time[:-1]], dim=0) * tempo
-            + clip_start)
+    time = (torch.cat([torch.zeros(
+        (1, )), time[:-1]], dim=0) * tempo + clip_start)
     for i in range(num_events):
         note = dict(pitch=index2value['pitch'][tensor[i, 0].item()],
-                    start=time[i].item(),
+                    time=time[i].item(),
                     duration=index2value['duration'][tensor[i, 2].item()] *
                     tempo,
                     velocity=index2value['velocity'][tensor[i, 1].item()],

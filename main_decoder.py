@@ -153,7 +153,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         metadata_dict={},
         temperature=1.,
                               batch_size=10,
-                              top_p=0.9,
+                              top_p=0.92,
                               top_k=0)
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
