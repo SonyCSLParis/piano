@@ -135,6 +135,10 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
         app.run(host='0.0.0.0', port=5000, threaded=True)
 
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return 'pong'
+
 @app.route('/inpaint', methods=['GET'])
 def inpaint():
     global handler
@@ -146,8 +150,8 @@ def inpaint():
     return scores
 
 
-@app.route('/test', methods=['GET', 'POST'])
-def debug():
+@app.route('/invocations', methods=['POST'])
+def invocations():
     d = json.loads(request.data)
     print(d)
     num_max_generated_events = 15
