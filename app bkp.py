@@ -29,15 +29,12 @@ from BFT.getters import get_dataloader_generator, get_sos_embedding, get_source_
 
 
 @click.command()
-@click.argument('cmd')
 @click.option('-o', '--overfitted', is_flag=True)
 @click.option('-c', '--config', type=click.Path(exists=True))
 @click.option('-n', '--num_workers', type=int, default=0)
-def launcher(cmd, overfitted, config, num_workers):
+def launcher(overfitted, config, num_workers):
     # === Set shared parameters
     # only use 1 GPU for inference
-    print(cmd)
-    assert cmd == 'serve'
     world_size = 1
 
     # Load config as dict
