@@ -62,79 +62,6 @@ def launcher(cmd, overfitted, config, num_workers):
              join=True)
 
 
-# def main(rank, overfitted, config, num_workers, world_size, model_dir):
-#     # === Init process group
-#     os.environ['MASTER_ADDR'] = 'localhost'
-#     # os.environ['MASTER_PORT'] = '12355'
-#     # os.environ['MASTER_PORT'] = '12356'
-#     os.environ['MASTER_PORT'] = '12357'
-#     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
-#     torch.cuda.set_device(rank)
-#     device = f'cuda:{rank}'
-
-#     # === Decoder ====
-#     # dataloader generator
-#     dataloader_generator = get_dataloader_generator(
-#         dataset=config['dataset'],
-#         dataloader_generator_kwargs=config['dataloader_generator_kwargs'])
-
-#     # data processor
-#     global data_processor
-#     data_processor = get_source_target_data_processor(
-#         dataloader_generator=dataloader_generator,
-#         data_processor_type=config['data_processor_type'],
-#         data_processor_kwargs=config['data_processor_kwargs'])
-
-#     # positional embedding
-#     positional_embedding_source: PositionalEmbedding = get_positional_embedding(
-#         dataloader_generator=dataloader_generator,
-#         positional_embedding_dict=config['positional_embedding_source_dict'])
-#     positional_embedding_target: PositionalEmbedding = get_positional_embedding(
-#         dataloader_generator=dataloader_generator,
-#         positional_embedding_dict=config['positional_embedding_target_dict'])
-#     # sos embedding
-#     sos_embedding = get_sos_embedding(
-#         dataloader_generator=dataloader_generator,
-#         sos_embedding_dict=config['sos_embedding_dict'])
-#     encoder_decoder = get_encoder_decoder(
-#         data_processor=data_processor,
-#         dataloader_generator=dataloader_generator,
-#         positional_embedding_source=positional_embedding_source,
-#         positional_embedding_target=positional_embedding_target,
-#         sos_embedding=sos_embedding,
-#         encoder_decoder_type=config['encoder_decoder_type'],
-#         encoder_decoder_kwargs=config['encoder_decoder_kwargs'],
-#         training_phase=False)
-
-#     encoder_decoder.to(device)
-#     encoder_decoder = DistributedDataParallel(
-#         module=encoder_decoder,
-#         device_ids=[rank],
-#         output_device=rank,
-#         #   find_unused_parameters=True
-#     )
-
-#     global handler
-#     handler = EncoderDecoderHandler(model=encoder_decoder,
-#                                     model_dir=model_dir,
-#                                     dataloader_generator=dataloader_generator)
-#     # Load model
-#     if overfitted:
-#         handler.load(early_stopped=False)
-#     else:
-#         handler.load(early_stopped=True)
-
-#     # debug_test()
-
-#     local_only = False
-#     if local_only:
-#         # accessible only locally:
-#         app.run(threaded=True)
-#     else:
-#         # accessible from outside:
-#         app.run(host='0.0.0.0', port=80, threaded=True)
-
-
 def main(rank, overfitted, config, num_workers, world_size, model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -145,13 +72,67 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
 
+    # === Decoder ====
+    # dataloader generator
+    dataloader_generator = get_dataloader_generator(
+        dataset=config['dataset'],
+        dataloader_generator_kwargs=config['dataloader_generator_kwargs'])
+
+    # data processor
+    global data_processor
+    data_processor = get_source_target_data_processor(
+        dataloader_generator=dataloader_generator,
+        data_processor_type=config['data_processor_type'],
+        data_processor_kwargs=config['data_processor_kwargs'])
+
+    # positional embedding
+    positional_embedding_source: PositionalEmbedding = get_positional_embedding(
+        dataloader_generator=dataloader_generator,
+        positional_embedding_dict=config['positional_embedding_source_dict'])
+    positional_embedding_target: PositionalEmbedding = get_positional_embedding(
+        dataloader_generator=dataloader_generator,
+        positional_embedding_dict=config['positional_embedding_target_dict'])
+    # sos embedding
+    sos_embedding = get_sos_embedding(
+        dataloader_generator=dataloader_generator,
+        sos_embedding_dict=config['sos_embedding_dict'])
+    encoder_decoder = get_encoder_decoder(
+        data_processor=data_processor,
+        dataloader_generator=dataloader_generator,
+        positional_embedding_source=positional_embedding_source,
+        positional_embedding_target=positional_embedding_target,
+        sos_embedding=sos_embedding,
+        encoder_decoder_type=config['encoder_decoder_type'],
+        encoder_decoder_kwargs=config['encoder_decoder_kwargs'],
+        training_phase=False)
+
+    encoder_decoder.to(device)
+    encoder_decoder = DistributedDataParallel(
+        module=encoder_decoder,
+        device_ids=[rank],
+        output_device=rank,
+        #   find_unused_parameters=True
+    )
+
+    global handler
+    handler = EncoderDecoderHandler(model=encoder_decoder,
+                                    model_dir=model_dir,
+                                    dataloader_generator=dataloader_generator)
+    # Load model
+    if overfitted:
+        handler.load(early_stopped=False)
+    else:
+        handler.load(early_stopped=True)
+
+    # debug_test()
+
     local_only = False
     if local_only:
         # accessible only locally:
         app.run(threaded=True)
     else:
         # accessible from outside:
-        app.run(host='0.0.0.0', port=80, threaded=True)
+        app.run(host='0.0.0.0', port=8080, threaded=True)
 
 
 @app.route('/ping', methods=['GET'])
