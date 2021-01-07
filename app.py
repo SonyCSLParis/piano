@@ -27,6 +27,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from BFT.getters import get_dataloader_generator, get_sos_embedding, get_source_target_data_processor, get_encoder_decoder, get_positional_embedding
 
+DEBUG = True
 
 @click.command()
 @click.argument('cmd')
@@ -66,8 +67,8 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
-    # os.environ['MASTER_PORT'] = '12356'
-    os.environ['MASTER_PORT'] = '12357'
+    os.environ['MASTER_PORT'] = '12356'
+    # os.environ['MASTER_PORT'] = '12357'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -124,15 +125,24 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
     else:
         handler.load(early_stopped=True)
 
-    # debug_test()
-
     local_only = False
     if local_only:
         # accessible only locally:
         app.run(threaded=True)
     else:
         # accessible from outside:
-        app.run(host='0.0.0.0', port=8080, threaded=True)
+        # TODO use 8080!
+        # debug = False
+        # port = 8080
+        port = 5000
+        # debug = False
+
+        app.run(host='0.0.0.0',
+                port=port,
+                threaded=True,
+                debug=True,
+                use_reloader=False
+                )
 
 
 @app.route('/ping', methods=['GET'])
@@ -152,13 +162,31 @@ def inpaint():
 
 @app.route('/invocations', methods=['POST'])
 def invocations():
+    case = request.args.get('case', None)
+    assert case in ['start', 'continue']
+        
+    # === Parse request ===
+    # common components
     d = json.loads(request.data)
-    print(d)
-    num_max_generated_events = 15
+    if DEBUG:
+        print(d)
+        
     notes = d['notes']
     selected_region = d['selected_region']
-    x, (event_start, event_end) = ableton_to_tensor(notes, selected_region)
-
+    
+    # two different parsing methods
+    if case == 'start':                
+        num_max_generated_events = 15        
+        x, (event_start, event_end) = ableton_to_tensor(notes, selected_region)
+    elif case == 'continue':
+        num_max_generated_events = 30
+        json_notes = d['notes']
+        x = json_to_tensor(json_notes)
+        event_start = d['next_event_start']
+        event_end = d['next_event_end']
+    else:
+        raise NotImplementedError
+        
     original_size = x.size(0)
     # add batch_dim
     global data_processor
@@ -261,17 +289,6 @@ def update():
     x = x.unsqueeze(0).repeat(num_examples, 1, 1)
     _, x, _ = data_processor.preprocess(x)
 
-    # TODO case where x is bigger than 1024
-    # TODO add num_notes
-    # TODO exclude pad and start symbols
-    # TODO PAD BEFORE
-    # TODO compute state before calling inpaint_region
-    # TODO high pitched notes are discarded
-    # TODO tempo
-    # TODO send track duration
-    # TODO pb when selection out of bounds
-    # TODO not zeros after
-    # add correct size
     x = torch.cat([
         x,
         torch.zeros(num_examples, 1024 - x.size(1), 4).long().to(x.device)
