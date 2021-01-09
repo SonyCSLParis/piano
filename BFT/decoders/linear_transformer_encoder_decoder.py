@@ -268,7 +268,6 @@ class EncoderDecoder(nn.Module):
         """
         # deal with the SOS token embedding
         if i == 0:
-            # TODO check if correct:
             target_seq = self.sos_embedding(metadata_dict)
         else:
             channel_index_input = (i - 1) % self.num_channels_target

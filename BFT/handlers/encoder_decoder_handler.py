@@ -396,14 +396,6 @@ class EncoderDecoderHandler(Handler):
                              masked_positions=masked_positions)
         
         with torch.no_grad():
-            # init
-            state = None
-            h_pe = None
-            xi = torch.zeros_like(x)[:, 0, 0]
-                        
-            # # compute memory only once
-            memory = self.forward_source(source, metadata_dict)
-            
             # compute state for autoregressive generation
             def extract_state_from_parallel_state(state_parallel, i):
                 extracted_state = []
@@ -427,30 +419,41 @@ class EncoderDecoderHandler(Handler):
                     ]
                     extracted_state.append(new_state)
                 return extracted_state
-                                    
-            weights, _, state_parallel = self.forward_with_states(
-                        memory=memory,
-                        target=x,
-                        metadata_dict=metadata_dict
-                    )
-            
-            # TODO case start_event = 0!
-            state = extract_state_from_parallel_state(
-                state_parallel, start_event * self.num_channels_target - 1
-            )
-            xi = x[:, start_event - 1, 3]
+                                                
+            # Init
+            # compute memory only once
+            memory = self.forward_source(source, metadata_dict)
+            # Special case when start_event == 0
+            # do not compute state in parallel
+            if start_event == 0:
+                state = None
+                h_pe = None
+                xi = torch.zeros_like(x)[:, 0, 0]
+            else:                
+                weights, _, state_parallel = self.forward_with_states(
+                            memory=memory,
+                            target=x,
+                            metadata_dict=metadata_dict
+                        )
+                state = extract_state_from_parallel_state(
+                    state_parallel, start_event * self.num_channels_target - 1
+                )
+                xi = x[:, start_event - 1, 3]
             
             # compute h_pe
+            if start_event == 0:
+                h_pe = None
+            else:
+                target_embedded = self.model.module.data_processor.embed_target(x)
+
+                # add positional embeddings
+                target_seq = flatten(target_embedded)[:, : self.num_channels_target * start_event]
+                metadata_dict_sliced = {k: v[:, :start_event] for 
+                                        k, v in metadata_dict.items()}
+                _, h_pe = self.model.module.positional_embedding_target(
+                target_seq, i=0, h=None, metadata_dict=metadata_dict_sliced)
+
             batch_size, num_events_target, num_channels_source = x.size()
-            target_embedded = self.model.module.data_processor.embed_target(x)
-
-            # add positional embeddings
-            target_seq = flatten(target_embedded)[:, : self.num_channels_target * start_event]
-            metadata_dict_sliced = {k: v[:, :start_event] for 
-                                    k, v in metadata_dict.items()}
-            _, h_pe = self.model.module.positional_embedding_target(
-            target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
-
             # i corresponds to the position of the token BEING generated
             for event_index in range(start_event, end_event):
                 for channel_index in range(self.num_channels_target):
@@ -466,6 +469,14 @@ class EncoderDecoderHandler(Handler):
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
+                                        
+                    # TODO put this in a method so that it is applicable to all datasets
+                    # exclude non note symbols:
+                    exclude_symbols = ['START', 'END', 'XX']
+                    for sym in exclude_symbols:
+                        sym_index = self.dataloader_generator.dataset.value2index[
+                            self.dataloader_generator.features[channel_index]][sym]
+                        logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
                     for logit in logits:
@@ -490,7 +501,6 @@ class EncoderDecoderHandler(Handler):
                     xi = x[:, event_index, channel_index]
                     h_pe = forward_pass['h_pe']
                     state = forward_pass['state']
-        # TODO case where we generate only slices
         return x.detach().cpu()
 
     def plot_attention(self, attentions_list, timestamp, name):
