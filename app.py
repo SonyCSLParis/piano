@@ -297,7 +297,7 @@ def preprocess_input(x, event_start, event_end):
     masked_positions[:, event_start - offset: event_end - offset] = 1
     
     # TODO CHECK
-    masked_positions[:, event_end - offset, 3] = 1
+    masked_positions[:, event_end - offset - 1, 3] = 0
     
     return  (x_beginning, x, x_end), masked_positions, slice_begin
 
