@@ -146,13 +146,13 @@ def ping():
 
 
 @app.route('/invocations', methods=['POST'])
-def invocations():
-    case = request.args.get('case', None)
-    assert case in ['start', 'continue']
+def invocations():    
 
     # === Parse request ===
     # common components
     d = json.loads(request.data)
+    case = d['case']
+    assert case in ['start', 'continue']
     if DEBUG:
         print(d)
 
