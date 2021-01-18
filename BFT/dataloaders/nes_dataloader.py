@@ -11,11 +11,16 @@ class NESDataloader(DataloaderGenerator):
         dataset = SimpleNESDataset(voices=voices,
                                    sequences_size=sequences_size)
 
-        self.sequences_size = sequences_size
+        self.sequences_size = sequences_size        
         self.features = ['pitch', 'velocity', 'duration', 'time_shift']
         self.num_channels = 4
         super(NESDataloader, self).__init__(dataset=dataset)
-
+    
+    # alias
+    @property
+    def sequence_size(self):
+        return self.sequences_size
+        
     def write(self, x, path):
         tensor_dict = {feature: x[:, feature_index] for feature_index, feature in
                      enumerate(self.features)}

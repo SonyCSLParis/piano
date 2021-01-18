@@ -707,9 +707,6 @@ class EncoderDecoderHandler(Handler):
         assert self.recurrent
         self.eval()
         batch_size = source.size(0)
-
-        # TODO hard coded value
-        num_events = 1024
         
         import timeit
         start = timeit.default_timer()
