@@ -92,9 +92,7 @@ def categorical_crossentropy(value, target, mask=None, label_smoothing=False):
             value, target.split(1, dim=2), mask.split(1, dim=2)):
         # select relevent indices
         batch_size, num_events, num_tokens_of_channel = channel_probs.size()
-        num_events_mask = mask_channel.sum() // batch_size
-        assert mask_channel.sum() % batch_size == 0
-
+        
         probs = channel_probs[mask_channel.bool().repeat(
             1, 1, num_tokens_of_channel)]
         target = target_channel[mask_channel.bool()]
@@ -112,7 +110,9 @@ def categorical_crossentropy(value, target, mask=None, label_smoothing=False):
             )
             log_prb = nn.functional.log_softmax(probs, dim=1)
             ce = -(one_hot * log_prb).sum(dim=1)
-        sum = sum + ce
+        sum = sum + ce.sum()
+    # divide by the total number of tokens
+    sum = sum / mask.sum()
     return sum
 
 
