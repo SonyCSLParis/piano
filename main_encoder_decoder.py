@@ -156,9 +156,6 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     masked_positions = torch.zeros_like(x)
     # inpainting
     masked_positions[0:, 100:200] = 1
-    masked_positions[0:, 300:350] = 1
-    masked_positions[0:, 450:600] = 1
-    masked_positions[0:, 800:] = 1
     
     # unconstrained:
     # masked_positions[1:, :] = 1
@@ -174,7 +171,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         source=x,
         metadata_dict=metadata_dict,
         temperature=1.,
-        top_p=0.95
+        top_p=0.9
     )
 
 
