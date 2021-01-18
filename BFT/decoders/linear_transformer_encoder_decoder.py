@@ -235,12 +235,15 @@ class EncoderDecoder(nn.Module):
             h_pe_init=h_pe_init)
 
         # we can change loss mask
+        # mask = torch.ones_like(target)
+        mask = metadata_dict['masked_positions']
+        
         loss = categorical_crossentropy(value=weights_per_category,
                                         target=target,
-                                        mask=torch.ones_like(target),
+                                        mask=mask,
                                         label_smoothing=self.label_smoothing)
 
-        loss = loss.mean()
+        # loss = loss.mean()
         return {
             'loss': loss,
             'h_pe_target': h_pe_target,
