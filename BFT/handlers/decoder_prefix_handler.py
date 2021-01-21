@@ -1,6 +1,7 @@
-from BFT.handlers import Handler
-from BFT.dataloaders import DataloaderGenerator
-from BFT.utils import all_reduce_scalar, is_main_process, to_numpy, top_k_top_p_filtering
+from BFT.handlers.handler import Handler
+from torch.distributed.distributed_c10d import get_world_size
+from BFT.dataloaders.dataloader import DataloaderGenerator
+from BFT.utils import all_reduce_scalar, dict_pretty_print, display_monitored_quantities, is_main_process, to_numpy, top_k_top_p_filtering
 import torch
 import os
 from tqdm import tqdm
@@ -8,9 +9,11 @@ from itertools import islice
 from datetime import datetime
 import numpy as np
 from torch.nn.parallel import DistributedDataParallel
+from torch.utils.tensorboard import SummaryWriter
+import torch.distributed as dist
 
 
-class DecoderPrefixHandler(Handler):
+class DecoderHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
         super().__init__(model=model,
@@ -254,6 +257,37 @@ class DecoderPrefixHandler(Handler):
         ###############################
 
         return scores
+
+    def plot_attention(self, attentions_list, timestamp, name):
+        """
+        Helper function
+
+        :param attentions_list: list of (batch_size, num_heads, num_tokens_encoder
+
+        :return:
+        """
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        # to (batch_size, num_heads, num_tokens_decoder, num_tokens_encoder)
+        attentions_batch = torch.cat([t.unsqueeze(2) for t in attentions_list],
+                                     dim=2)
+
+        # plot only batch 0 for now
+        for batch_index, attentions in enumerate(attentions_batch):
+            plt.clf()
+            plt.cla()
+            num_heads = attentions.size(0)
+            for head_index, t in enumerate(attentions):
+                plt.subplot(1, num_heads, head_index + 1)
+                plt.title(f'Head {head_index}')
+                mat = t.detach().cpu().numpy()
+                sns.heatmap(mat, vmin=0, vmax=1, cmap="YlGnBu")
+                plt.grid(True)
+            plt.savefig(
+                f'{self.model_dir}/generations/{timestamp}_{batch_index}_{name}.pdf'
+            )
+            # plt.show()
+        plt.close()
 
 
     def compute_start_end_times(self, t, num_blocks, num_blocks_model):
