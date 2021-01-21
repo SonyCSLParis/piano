@@ -2,7 +2,6 @@
 @author: Gaetan Hadjeres
 """
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.handlers.decoder_prefix_handler import DecoderPrefixHandler
 import importlib
 import os
 import shutil
