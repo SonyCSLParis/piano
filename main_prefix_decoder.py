@@ -1,6 +1,7 @@
 """
 @author: Gaetan Hadjeres
 """
+from BFT.handlers import DecoderPrefixHandler
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
 import importlib
 import os

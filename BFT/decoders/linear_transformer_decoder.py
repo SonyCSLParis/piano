@@ -96,7 +96,6 @@ class CausalEncoder(nn.Module):
         :return:
         """
         batch_size, num_events, num_channels = target.size()
-
         
         target_embedded = self.data_processor.embed(target)
         target_seq = flatten(target_embedded)

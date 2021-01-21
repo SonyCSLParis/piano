@@ -30,21 +30,38 @@ class PianoPrefixDataProcessor(DataProcessor):
             [nt + 1 for nt in num_tokens_per_channel]),
                                         requires_grad=False)
 
+        # TODO PB to remove, relies on how the value2index is constructed
+        # self.end_tokens = nn.Parameter(torch.LongTensor([
+        #     value2index[END_SYMBOL] for value2index in
+        #     self.dataloader_generator.dataset.value2index.values()
+        # ]),
+        #                                requires_grad=False)
+        # # TODO iterate on features
+        # self.pad_tokens = nn.Parameter(torch.LongTensor([
+        #     value2index[PAD_SYMBOL] for value2index in
+        #     self.dataloader_generator.dataset.value2index.values()
+        # ]),
+        #                                requires_grad=False)
+        
+        # self.start_tokens = nn.Parameter(torch.LongTensor([
+        #     value2index[START_SYMBOL] for value2index in
+        #     self.dataloader_generator.dataset.value2index.values()
+        # ]),
+        #                                requires_grad=False)
         self.end_tokens = nn.Parameter(torch.LongTensor([
-            value2index[END_SYMBOL] for value2index in
-            self.dataloader_generator.dataset.value2index.values()
+            self.dataloader_generator.dataset.value2index[feature][END_SYMBOL] for feature in
+            self.dataloader_generator.features
         ]),
                                        requires_grad=False)
-        # TODO iterate on features
         self.pad_tokens = nn.Parameter(torch.LongTensor([
-            value2index[PAD_SYMBOL] for value2index in
-            self.dataloader_generator.dataset.value2index.values()
+            self.dataloader_generator.dataset.value2index[feature][PAD_SYMBOL] for feature in
+            self.dataloader_generator.features
         ]),
                                        requires_grad=False)
         
         self.start_tokens = nn.Parameter(torch.LongTensor([
-            value2index[START_SYMBOL] for value2index in
-            self.dataloader_generator.dataset.value2index.values()
+            self.dataloader_generator.dataset.value2index[feature][START_SYMBOL] for feature in
+            self.dataloader_generator.features
         ]),
                                        requires_grad=False)
 

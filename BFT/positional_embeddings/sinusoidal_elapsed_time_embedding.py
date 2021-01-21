@@ -37,7 +37,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         )
         
             
-        
         h = elapsed_time[:, -1] 
         
         # add zeros

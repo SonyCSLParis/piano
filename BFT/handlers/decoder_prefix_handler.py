@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 
 
-class DecoderHandler(Handler):
+class DecoderPrefixHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
         super().__init__(model=model,
@@ -54,8 +54,8 @@ class DecoderHandler(Handler):
             with torch.no_grad():
                 # TODO preprocess here
                 x = tensor_dict['x']
+                x, metadata_dict = self.data_processor.preprocess(x)
 
-            metadata_dict = {'original_sequence': x}
             # ========Train decoder =============
             self.optimizer.zero_grad()
             forward_pass = self.forward(target=x,
