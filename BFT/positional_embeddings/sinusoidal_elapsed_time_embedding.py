@@ -30,11 +30,16 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         x = metadata_dict['original_sequence']
         batch_size, num_events, num_channels = x.size()
         # batch_size, num_tokens, embedding_dim = x_embed.size()
+        
+        
         elapsed_time = self.dataloader_generator.get_elapsed_time(
             x
         )
         
+            
+        
         h = elapsed_time[:, -1] 
+        
         # add zeros
         elapsed_time = torch.cat(            
             [
@@ -43,6 +48,15 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             ],
             dim=1
         )
+        
+        # check if in prefix mode:
+        if 'decoding_start' in metadata_dict:
+            # we need to have an offset for the generated inpainted region
+            elapsed_time[:, metadata_dict['decoding_start']:] = (
+                elapsed_time[:, metadata_dict['decoding_start']:] -
+                elapsed_time[:, metadata_dict['decoding_start']]
+            )
+            h = h - elapsed_time[:, metadata_dict['decoding_start']]
         
         # add embedding_dim to elapsed time
         elapsed_time = elapsed_time.unsqueeze(2)

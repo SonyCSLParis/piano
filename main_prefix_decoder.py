@@ -2,7 +2,7 @@
 @author: Gaetan Hadjeres
 """
 from BFT.positional_embeddings.positional_embedding import PositionalEmbedding
-from BFT.handlers.decoder_handler import DecoderHandler
+from BFT.handlers.decoder_prefix_handler import DecoderPrefixHandler
 import importlib
 import os
 import shutil
@@ -116,7 +116,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
                                         device_ids=[rank],
                                         output_device=rank)
 
-    decoder_handler = DecoderHandler(
+    decoder_handler = DecoderPrefixHandler(
         model=decoder,
         model_dir=model_dir,
         dataloader_generator=dataloader_generator)

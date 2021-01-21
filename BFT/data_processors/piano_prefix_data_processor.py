@@ -265,7 +265,7 @@ class PianoPrefixDataProcessor(DataProcessor):
                 batch_size, num_events_output, 1))
         
         start_mask = (
-            y[:, :, :] == self.start_symbols.unsqueeze(0).unsqueeze(0).repeat(
+            y[:, :, :] == self.start_tokens.unsqueeze(0).unsqueeze(0).repeat(
                 batch_size, num_events_output, 1))
         
         final_mask = padding_mask + sod_mask + start_mask
@@ -278,7 +278,8 @@ class PianoPrefixDataProcessor(DataProcessor):
         # self.num_events_before + self.num_events_after + 1 is the location
         # of the SOD symbol (only the placeholder is added)
         metadata_dict = {'placeholder_duration': placeholder_duration,
-                         'decoding_start': self.num_events_before + self.num_events_after + 2}
+                         'decoding_start': self.num_events_before + self.num_events_after + 2,
+                         'original_sequence': y}
         return y, metadata_dict
                          
                     
