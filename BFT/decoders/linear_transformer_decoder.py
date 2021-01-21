@@ -97,7 +97,6 @@ class CausalEncoder(nn.Module):
         """
         batch_size, num_events, num_channels = target.size()
 
-        target = self.data_processor.preprocess(target)
         
         target_embedded = self.data_processor.embed(target)
         target_seq = flatten(target_embedded)

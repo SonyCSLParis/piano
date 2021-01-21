@@ -54,6 +54,8 @@ class DecoderHandler(Handler):
             with torch.no_grad():
                 # TODO preprocess here
                 x = tensor_dict['x']
+                x = self.data_processor.preprocess(x)
+                
 
             metadata_dict = {'original_sequence': x}
             # ========Train decoder =============
