@@ -79,6 +79,8 @@ class PianoDataloaderGenerator(DataloaderGenerator):
     
     def get_elapsed_time(self, x):
         """
+        This function only returns the aggregated sum,
+        it's not properly said the elapsed time
         x is (batch_size, num_events, num_channels)
         """
         assert 'time_shift' in self.features
