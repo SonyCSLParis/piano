@@ -72,7 +72,7 @@ class PianoPrefixDataProcessor(DataProcessor):
         x = cuda_variable(x.long())
 
         num_events_middle = random.randint(
-            0, sequences_size - self.num_events_before -
+            1, sequences_size - self.num_events_before -
             self.num_events_after - 3 - 1)
         
         # we will be adding these at the end of the sequence
@@ -279,7 +279,7 @@ class PianoPrefixDataProcessor(DataProcessor):
         metadata_dict = {'placeholder_duration': placeholder_duration,
                          'decoding_start': self.num_events_before + self.num_events_after + 2,
                          'original_sequence': y,
-                         'mask_loss': final_mask}
+                         'loss_mask': final_mask}
         return y, metadata_dict
                          
                     
