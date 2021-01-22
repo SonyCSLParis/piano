@@ -130,22 +130,72 @@ class CausalEncoder(nn.Module):
         ]
 
         # we can change loss mask
-        loss = categorical_crossentropy(
-            value=weights_per_category,
-            target=target,
-            mask=torch.ones_like(target),
-            label_smoothing=self.label_smoothing
-        )
-
-        loss = loss.mean()
-        return {
-            'loss':                 loss,
-            'h_pe':                 h_pe,
-            'weights_per_category': weights_per_category,
-            'monitored_quantities': {
-                'loss': loss.item()
+        if 'loss_mask' in metadata_dict:
+            loss_mask = (1 - metadata_dict['loss_mask'].long())
+        else:
+            loss_mask = torch.ones_like(target)
+            
+        # If prefix mode, we keep track of the two separate losses
+        if 'decoding_start' in metadata_dict:
+            decoding_start = metadata_dict['decoding_start']
+            weights_prefix = [
+                weight[:, :decoding_start]
+                for weight in weights_per_category]
+            target_prefix = target[:, :decoding_start]
+            loss_mask_prefix = loss_mask[:, :decoding_start]
+            loss_prefix = categorical_crossentropy(
+                value=weights_prefix,
+                target=target_prefix,
+                mask=loss_mask_prefix,
+                label_smoothing=self.label_smoothing
+            )
+            
+            weights_inpainting = [
+                weight[:, decoding_start: ]
+                for weight in weights_per_category]
+            target_inpainting = target[:, decoding_start: ]
+            loss_mask_inpainting = loss_mask[:, decoding_start:]
+            loss_inpainting = categorical_crossentropy(
+                value=weights_inpainting,
+                target=target_inpainting,
+                mask=loss_mask_inpainting,
+                label_smoothing=self.label_smoothing
+            )
+            
+            num_tokens_prefix = loss_mask_prefix.sum()
+            num_tokens_inpainting = loss_mask_inpainting.sum()
+            
+            loss = (loss_prefix * num_tokens_prefix + loss_inpainting * num_tokens_inpainting) / (num_tokens_prefix + num_tokens_inpainting)
+            
+            return {
+                'loss':                 loss,
+                'h_pe':                 h_pe,
+                'weights_per_category': weights_per_category,
+                'monitored_quantities': {
+                    'loss': loss.item(),
+                    'loss_prefix': loss_prefix.item(),
+                    'loss_inpainting': loss_inpainting.item()
+                }
             }
-        }
+
+            
+        else:
+            loss = categorical_crossentropy(
+                value=weights_per_category,
+                target=target,
+                mask=loss_mask,
+                label_smoothing=self.label_smoothing
+            )
+
+        
+            return {
+                'loss':                 loss,
+                'h_pe':                 h_pe,
+                'weights_per_category': weights_per_category,
+                'monitored_quantities': {
+                    'loss': loss.item()
+                }
+            }
 
     def forward_step(self, target, metadata_dict, state, i, h_pe):
         """
