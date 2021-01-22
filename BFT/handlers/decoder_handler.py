@@ -56,7 +56,7 @@ class DecoderHandler(Handler):
                 x = tensor_dict['x']
                 x = self.data_processor.preprocess(x)
                 
-
+            # TODO metadata_dict should be returned by preprocess
             metadata_dict = {'original_sequence': x}
             # ========Train decoder =============
             self.optimizer.zero_grad()
