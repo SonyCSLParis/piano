@@ -18,7 +18,7 @@ config = {
     # --- DataProcessor ---
     'data_processor_type':         'piano_prefix',  # can be used to filter out some channels
     'data_processor_kwargs':       dict(
-        embedding_size=32,
+        embedding_size=64,
         num_events_before=256,
         num_events_after=256
     ),  # Can be different from the encoder's data processor

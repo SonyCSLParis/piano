@@ -36,10 +36,14 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
             x
         )            
         
+        zeros_location = (placeholder_duration < 0.01)
+        
         h = elapsed_time[:, -1] 
         h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
         # TODO check it's almost 100
         h = h / placeholder_duration * 100
+        
+        h[zeros_location] = 100
     
         # add zeros
         elapsed_time = torch.cat(            
@@ -52,11 +56,12 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
         
         elapsed_time[:, metadata_dict['decoding_start']:] = (
             elapsed_time[:, metadata_dict['decoding_start']:] -
-            elapsed_time[:, metadata_dict['decoding_start']]
-        ) / placeholder_duration * 100
-        
+            elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
+        ) / placeholder_duration.unsqueeze(1) * 100
+    
         # TODO no progress bar for prefixes?!
         elapsed_time[:, :metadata_dict['decoding_start']] = 0
+        elapsed_time[zeros_location, metadata_dict['decoding_start']:] = 100
 
         
         # add embedding_dim to elapsed time

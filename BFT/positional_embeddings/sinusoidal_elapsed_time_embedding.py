@@ -56,7 +56,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             # we need to have an offset for the generated inpainted region
             elapsed_time[:, metadata_dict['decoding_start']:] = (
                 elapsed_time[:, metadata_dict['decoding_start']:] -
-                elapsed_time[:, metadata_dict['decoding_start']]
+                elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
             )
 
         
