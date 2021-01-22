@@ -82,7 +82,7 @@ class PianoPrefixDataProcessor(DataProcessor):
                                                  self.num_events_after) - 3
         
         # Slice x
-        x = x[:, : -remainder_num_events]
+        x = x[:, :self.num_events_before + num_events_middle + self.num_events_after]
         batch_size, num_events, _ = x.size()
         
         # === Find end tokens in x
@@ -136,6 +136,8 @@ class PianoPrefixDataProcessor(DataProcessor):
                     self.dataloader_generator.get_feature_index('time_shift')] = placeholder_duration_token
         
         new_before_list, new_middle_list, new_after_list = [], [], []
+        
+        print('DEBUG')
         # TODO batch this?!
         for (b, m, a, p_duration, p_duration_token, c_start_token, c_end_token,
              start_token_l, end_token_l) in zip(before, middle, after, placeholder_duration, placeholder_duration_token, contains_start_token,  contains_end_token, start_token_location, end_token_location):
@@ -145,6 +147,7 @@ class PianoPrefixDataProcessor(DataProcessor):
             # == if middle contains the start token
             if c_start_token and (                
                 self.num_events_before <= start_token_l < self.num_events_before + num_events_middle ):
+                print('Case #1')
                     
                 # == if middle also contains the end token
                 if c_end_token and (self.num_events_before <= end_token_l < self.num_events_before + num_events_middle):
@@ -176,6 +179,7 @@ class PianoPrefixDataProcessor(DataProcessor):
                     
             # == if START token is in "after"                             
             elif c_start_token and (self.num_events_before + num_events_middle <= start_token_l):
+                print('Case #2')
                 # new middle is only an SOD symbol followed by an END symbol
                 new_middle = torch.cat([
                     self.sod_symbols.unsqueeze(0),
@@ -200,6 +204,7 @@ class PianoPrefixDataProcessor(DataProcessor):
                 
             # == if END token is in "before"
             elif c_end_token and (end_token_l < self.num_events_before):
+                print('Case #3')
                 # new middle is only an SOD symbol followed by an END symbol
                 new_middle = torch.cat([
                     self.sod_symbols.unsqueeze(0),
@@ -214,6 +219,7 @@ class PianoPrefixDataProcessor(DataProcessor):
                 new_before = b
             # == if in none of the cases above
             else:
+                print('Case #4')
                 # only add sod and end to middle (if necessary)
                 
                 # == if middle contains the end token
