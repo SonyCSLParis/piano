@@ -29,25 +29,7 @@ class PianoPrefixDataProcessor(DataProcessor):
         self.sod_symbols = nn.Parameter(torch.LongTensor(
             [nt + 1 for nt in num_tokens_per_channel]),
                                         requires_grad=False)
-
-        # TODO PB to remove, relies on how the value2index is constructed
-        # self.end_tokens = nn.Parameter(torch.LongTensor([
-        #     value2index[END_SYMBOL] for value2index in
-        #     self.dataloader_generator.dataset.value2index.values()
-        # ]),
-        #                                requires_grad=False)
-        # # TODO iterate on features
-        # self.pad_tokens = nn.Parameter(torch.LongTensor([
-        #     value2index[PAD_SYMBOL] for value2index in
-        #     self.dataloader_generator.dataset.value2index.values()
-        # ]),
-        #                                requires_grad=False)
         
-        # self.start_tokens = nn.Parameter(torch.LongTensor([
-        #     value2index[START_SYMBOL] for value2index in
-        #     self.dataloader_generator.dataset.value2index.values()
-        # ]),
-        #                                requires_grad=False)
         self.end_tokens = nn.Parameter(torch.LongTensor([
             self.dataloader_generator.dataset.value2index[feature][END_SYMBOL] for feature in
             self.dataloader_generator.features
@@ -296,7 +278,8 @@ class PianoPrefixDataProcessor(DataProcessor):
         # of the SOD symbol (only the placeholder is added)
         metadata_dict = {'placeholder_duration': placeholder_duration,
                          'decoding_start': self.num_events_before + self.num_events_after + 2,
-                         'original_sequence': y}
+                         'original_sequence': y,
+                         'mask_loss': final_mask}
         return y, metadata_dict
                          
                     
