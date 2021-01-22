@@ -12,7 +12,8 @@ config = {
             'time_dilation':  True,
             'velocity_shift': True,
             'transposition':  True
-        }
+        },
+        pad_before=True
     ),  # Can be different from the encoder's data loader
 
     # --- DataProcessor ---

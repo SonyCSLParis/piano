@@ -1,4 +1,3 @@
-from math import remainder
 from DatasetManager.piano.piano_helper import find_nearest_value
 from DatasetManager.piano.piano_midi_dataset import END_SYMBOL, PAD_SYMBOL, START_SYMBOL
 from .data_processor import DataProcessor
@@ -286,9 +285,6 @@ class PianoPrefixDataProcessor(DataProcessor):
         final_mask = padding_mask + sod_mask + start_mask
         # add placeholder: it is added at num_events_before position
         final_mask[:, self.num_events_before, :] = True
-
-        # TODO separate losses
-        # elapsed percentage : needs true duration of placeholder
 
         # self.num_events_before + self.num_events_after + 1 is the location
         # of the SOD symbol (only the placeholder is added)

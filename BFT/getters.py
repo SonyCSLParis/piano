@@ -45,6 +45,7 @@ def get_data_processor(dataloader_generator, data_processor_type,
             for feature in dataloader_generator.features
         ]
         data_processor = PianoDataProcessor(
+            dataloader_generator=dataloader_generator,
             embedding_size=data_processor_kwargs['embedding_size'],
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel)
@@ -83,6 +84,7 @@ def get_source_target_data_processor(dataloader_generator, data_processor_type,
             for feature in dataloader_generator.features
         ]
         data_processor = MaskedPianoSourceTargetDataProcessor(
+            dataloader_generator=dataloader_generator,
             embedding_size=data_processor_kwargs['embedding_size'],
             num_events=num_events,
             num_tokens_per_channel=num_tokens_per_channel)
