@@ -1,6 +1,6 @@
 from BFT.dataloaders.nes_dataloader import NESDataloader
 from BFT.start_of_sequence_embeddings import SOSEmbedding, BaseSOSEmbedding, LearntSOSEmbedding
-from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding
+from BFT.positional_embeddings import ChannelEmbeddings, BasePositionalEmbedding, PositionalEmbedding, SinusoidalElapsedTimeEmbedding, SinusoidalPositionalEmbedding, SinusoidalProgressBarEmbedding
 from BFT.data_processors import BachDataProcessor, MaskedPianoSourceTargetDataProcessor, PianoDataProcessor, PianoPrefixDataProcessor
 from BFT.dataloaders import BachDataloaderGenerator, PianoDataloaderGenerator
 
@@ -109,6 +109,9 @@ def get_positional_embedding(dataloader_generator,
             base_pe = ChannelEmbeddings(**pe_kwargs)
         elif pe_name == 'sinusoidal_elapsed_time_embedding':
             base_pe: BasePositionalEmbedding = SinusoidalElapsedTimeEmbedding(
+                dataloader_generator=dataloader_generator, **pe_kwargs)
+        elif pe_name == 'sinusoidal_progress_bar_embedding':
+            base_pe: BasePositionalEmbedding = SinusoidalProgressBarEmbedding(
                 dataloader_generator=dataloader_generator, **pe_kwargs)
         else:
             raise NotImplementedError
