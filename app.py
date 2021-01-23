@@ -173,7 +173,7 @@ def invocations():
     elif case == 'continue':
         num_max_generated_events = 30
         json_notes = d['notes']
-        x, num_events_before_padding = json_to_tensor(json_notes)
+        x, num_events_before_padding = json_to_tensor(json_notes, seconds_per_beat)
         event_start = d['next_event_start']
         event_end = d['next_event_end']
     else:
@@ -282,7 +282,7 @@ def preprocess_input(x, event_start, event_end):
     return (x_beginning, x, x_end), masked_positions, slice_begin
 
 
-def json_to_tensor(json_note_list):
+def json_to_tensor(json_note_list, seconds_per_beat):
     d = {
         'pitch': [],
         'time': [],
@@ -306,14 +306,10 @@ def json_to_tensor(json_note_list):
              time=torch.FloatTensor([x[1] for x in l]),
              duration=torch.FloatTensor([max(float(x[2]), 0.05) for x in l]),
              velocity=torch.LongTensor([x[3] for x in l]))
-    # TODO remove debug
-    print(f'Max pitch: {d["pitch"].max()}')
 
     # multiply by tempo
-    tempo = 0.5  # 120 bpm
-    # tempo = 1  # absolute timing?
-    d['time'] = d['time'] * tempo
-    d['duration'] = d['duration'] * tempo
+    d['time'] = d['time'] * seconds_per_beat
+    d['duration'] = d['duration'] * seconds_per_beat
 
     # compute time_shift
     d['time_shift'] = torch.cat(
