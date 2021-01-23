@@ -52,7 +52,6 @@ class DecoderPrefixHandler(Handler):
 
             # ==========================
             with torch.no_grad():
-                # TODO preprocess here
                 x = tensor_dict['x']
                 x, metadata_dict = self.data_processor.preprocess(x)
 
