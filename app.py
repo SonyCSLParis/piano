@@ -173,9 +173,9 @@ def invocations():
     elif case == 'continue':
         num_max_generated_events = 30
         json_notes = d['notes']
-        x, num_events_before_padding = json_to_tensor(json_notes, seconds_per_beat)
         event_start = d['next_event_start']
         event_end = d['next_event_end']
+        x, num_events_before_padding = json_to_tensor(json_notes, seconds_per_beat, event_start, event_end, selected_region)
     else:
         raise NotImplementedError
 
@@ -249,6 +249,7 @@ def preprocess_input(x, event_start, event_end):
         [type]: [description]
     """
     global data_processor
+    global handler
     # add batch_dim
     # only one proposal for now
     num_examples = 1
@@ -259,10 +260,11 @@ def preprocess_input(x, event_start, event_end):
 
     # if x is too large
     # x is always >= 1024 since we pad
-    if total_length > 1024:
+    num_events_model = handler.dataloader_generator.sequences_size
+    if total_length > num_events_model:
         # slice
-        slice_begin = max((event_start - 512), 0)
-        slice_end = slice_begin + 1024
+        slice_begin = max((event_start - num_events_model // 2), 0)
+        slice_end = slice_begin + num_events_model
 
         x_beginning = x[:, :slice_begin]
         x_end = x[:, slice_end:]
@@ -276,13 +278,16 @@ def preprocess_input(x, event_start, event_end):
     masked_positions[:, event_start - offset:event_end - offset] = 1
 
     # the last time shift should be known:
-    if event_end < total_length:
-        masked_positions[:, event_end - offset - 1, 3] = 0
+    # TODO check this condition : should be done in conjunction with setting the correct duration of the inpainted region
+    # if event_end < total_length:
+    #     masked_positions[:, event_end - offset - 1, 3] = 0
 
     return (x_beginning, x, x_end), masked_positions, slice_begin
 
 
-def json_to_tensor(json_note_list, seconds_per_beat):
+def json_to_tensor(json_note_list, seconds_per_beat,
+                   event_start, event_end,
+                   selected_region):
     d = {
         'pitch': [],
         'time': [],
@@ -315,6 +320,15 @@ def json_to_tensor(json_note_list, seconds_per_beat):
     d['time_shift'] = torch.cat(
         [d['time'][1:] - d['time'][:-1],
          torch.zeros(1, )], dim=0)
+    
+    
+    # Recompute time shifts in the selected_region
+    # Set correct time shifts and compute masked_positions
+    start_time = d['time'][event_start]
+    end_time = selected_region['end'] * seconds_per_beat
+    num_events_to_compose = event_end - event_start
+    d['time_shift'][event_start:event_end] = ((end_time - start_time.item()) /                                              
+                                              num_events_to_compose)
 
     global handler
     num_events_before_padding = d['pitch'].size(0)
@@ -472,15 +486,17 @@ def ableton_to_tensor(ableton_note_list,
             1] = start_time * seconds_per_beat - d['time'][event_start - 1]
     else:
         assert start_time * seconds_per_beat >= d['time'][event_start - 1]
+        # TODO we could regenerate this token + filtering
         # make the first note start exactly at start_time
         d['time_shift'][
             event_start -
             1] = start_time * seconds_per_beat - d['time'][event_start - 1]
         # make the last time shift to be exactly the gap between the region and the note
-        if d['time'].size(0) > event_end:
-            d['time_shift'][
-                event_end -
-                1] = d['time'][event_end] - end_time * seconds_per_beat
+        # TODO check this! It's about the 
+        # if d['time'].size(0) > event_end:
+        #     d['time_shift'][
+        #         event_end -
+        #         1] = d['time'][event_end] - end_time * seconds_per_beat
 
     # adjustments
     # zero is not in pitch
