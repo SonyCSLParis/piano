@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 
 
-class DecoderHandler(Handler):
+class DecoderPrefixHandler(Handler):
     def __init__(self, model: DistributedDataParallel, model_dir: str,
                  dataloader_generator: DataloaderGenerator) -> None:
         super().__init__(model=model,
@@ -54,7 +54,7 @@ class DecoderHandler(Handler):
             with torch.no_grad():
                 x = tensor_dict['x']
                 x, metadata_dict = self.data_processor.preprocess(x)
-                
+
             # ========Train decoder =============
             self.optimizer.zero_grad()
             forward_pass = self.forward(target=x,
@@ -288,24 +288,6 @@ class DecoderHandler(Handler):
             # plt.show()
         plt.close()
 
-    # TODO put this in data_processor/dataloader_generator
-    # but hard!
-    def init_generation_chorale(self, num_events, start_index):
-        PAD = [
-            d[PAD_SYMBOL]
-            for d in self.dataloader_generator.dataset.note2index_dicts
-        ]
-        START = [
-            d[START_SYMBOL]
-            for d in self.dataloader_generator.dataset.note2index_dicts
-        ]
-        aa = torch.Tensor(PAD).unsqueeze(0).unsqueeze(0).repeat(
-            1, start_index - 1, 1).long()
-        bb = torch.Tensor(START).unsqueeze(0).unsqueeze(0).long()
-        cc = torch.Tensor(PAD).unsqueeze(0).unsqueeze(0).repeat(
-            1, num_events - start_index, 1).long()
-        init_sequence = torch.cat([aa, bb, cc], 1)
-        return init_sequence
 
     def compute_start_end_times(self, t, num_blocks, num_blocks_model):
         """

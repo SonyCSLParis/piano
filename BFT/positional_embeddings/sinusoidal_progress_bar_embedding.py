@@ -4,21 +4,17 @@ from BFT.utils import flatten
 import torch
 import math
 
-class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
+class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
     def __init__(self, positional_embedding_size, num_channels, 
                  dataloader_generator, dropout, **kwargs):
-        super(SinusoidalElapsedTimeEmbedding, self).__init__()
+        super(SinusoidalProgressBarEmbedding, self).__init__()
         assert positional_embedding_size % 2 == 0
         self.dataloader_generator = dataloader_generator
         self.positional_embedding_size = positional_embedding_size
 
         self.dropout = torch.nn.Dropout(p=dropout)
         self.num_channels = num_channels
-        self.mask_positions = kwargs['mask_positions']
-        if self.mask_positions:
-            self.mask_vector = nn.Parameter(
-                torch.randn((self.positional_embedding_size, ))
-            )
+        
 
     def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         assert i == 0
@@ -27,6 +23,10 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         assert 'original_sequence' in metadata_dict, (
             'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
         )
+        assert 'placeholder_duration' in metadata_dict
+        assert 'decoding_start' in metadata_dict
+        placeholder_duration = metadata_dict['placeholder_duration']
+        
         x = metadata_dict['original_sequence']
         batch_size, num_events, num_channels = x.size()
         # batch_size, num_tokens, embedding_dim = x_embed.size()
@@ -34,14 +34,17 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         
         elapsed_time = self.dataloader_generator.get_elapsed_time(
             x
-        )
+        )            
         
-            
+        zeros_location = (placeholder_duration < 0.01)
+        
         h = elapsed_time[:, -1] 
-        if 'decoding_start' in metadata_dict:
-            h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
-            
+        h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
+        # TODO check it's almost 100
+        h = h / placeholder_duration * 100
         
+        h[zeros_location] = 100
+    
         # add zeros
         elapsed_time = torch.cat(            
             [
@@ -51,23 +54,18 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             dim=1
         )
         
-        # check if in prefix mode:
-        if 'decoding_start' in metadata_dict:
-            # we need to have an offset for the generated inpainted region
-            elapsed_time[:, metadata_dict['decoding_start']:] = (
-                elapsed_time[:, metadata_dict['decoding_start']:] -
-                elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
-            )
+        elapsed_time[:, metadata_dict['decoding_start']:] = (
+            elapsed_time[:, metadata_dict['decoding_start']:] -
+            elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
+        ) / placeholder_duration.unsqueeze(1) * 100
+    
+        # TODO no progress bar for prefixes?!
+        elapsed_time[:, :metadata_dict['decoding_start']] = 0
+        elapsed_time[zeros_location, metadata_dict['decoding_start']:] = 100
 
         
         # add embedding_dim to elapsed time
         elapsed_time = elapsed_time.unsqueeze(2)
-        
-        # TODO scale?! only 10?!
-        elapsed_time = elapsed_time * 100
-        h = h * 100
-        
-
         
         pe = torch.zeros(batch_size, 
                          num_events, self.positional_embedding_size)
@@ -84,19 +82,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         pos_embedding = pe.repeat_interleave(
             self.num_channels, dim=1
         )
-        
-        
-        if self.mask_positions:
-            masked_positions = metadata_dict['masked_positions']
-            flattened_masked_positions = flatten(masked_positions)
-            flattened_masked_positions = flattened_masked_positions.view(batch_size * num_events * num_channels)
-            pos_embedding = pos_embedding.view(
-                batch_size * num_events * num_channels, self.positional_embedding_size
-            )
-            pos_embedding[flattened_masked_positions.bool()] = self.mask_vector.unsqueeze(0)
-            pos_embedding = pos_embedding.view(batch_size,
-                                          num_events * num_channels,
-                                          self.positional_embedding_size)
 
         pos_embedding = self.dropout(pos_embedding)
         x_embed = torch.cat([x_embed, pos_embedding], dim=2)
@@ -104,9 +89,8 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
 
     def forward_step(self, x, i=0, h=None, metadata_dict={}):
         # TODO add 'decoding_start'
-        # assert 'decoding_start' in metadata_dict
-        
-        
+        # TODO write method
+        assert 'decoding_start' in metadata_dict
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
         

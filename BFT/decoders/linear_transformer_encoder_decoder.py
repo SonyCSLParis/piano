@@ -238,6 +238,9 @@ class EncoderDecoder(nn.Module):
         # mask = torch.ones_like(target)
         mask = metadata_dict['masked_positions']
         
+        # so that we do not predict PAD and START symbols
+        if 'loss_mask' in metadata_dict:
+            mask = torch.logical_and(mask.bool(), torch.logical_not(metadata_dict['loss_mask']))
         loss = categorical_crossentropy(value=weights_per_category,
                                         target=target,
                                         mask=mask,
