@@ -285,6 +285,7 @@ def preprocess_input(x, event_start, event_end):
     return (x_beginning, x, x_end), masked_positions, slice_begin
 
 
+
 def json_to_tensor(json_note_list, seconds_per_beat,
                    event_start, event_end,
                    selected_region):
