@@ -325,7 +325,7 @@ def json_to_tensor(json_note_list, seconds_per_beat):
     del d['time']
     # TODO over pad?
     d = handler.dataloader_generator.dataset.add_start_end_symbols(
-        sequence=d, start_time=None, sequence_size=1024 + 512)
+        sequence=d, start_time=0, sequence_size=1024 + 512)
 
     sequence_dict = handler.dataloader_generator.dataset.tokenize(d)
     # to pytorch :)
@@ -503,7 +503,7 @@ def ableton_to_tensor(ableton_note_list,
 
     # We overpad
     d = handler.dataloader_generator.dataset.add_start_end_symbols(
-        sequence=d, start_time=None, sequence_size=1024 + 512)
+        sequence=d, start_time=0, sequence_size=1024 + 512)
 
     sequence_dict = handler.dataloader_generator.dataset.tokenize(d)
     # to pytorch :)
