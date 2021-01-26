@@ -27,13 +27,14 @@ class EncoderDecoderHandler(Handler):
                                   target,
                                   metadata_dict=metadata_dict,
                                   h_pe_init=h_pe_init)
-        
-    def forward_with_states(self, memory, target, metadata_dict, h_pe_init=None):
+
+    def forward_with_states(self,
+                            memory,
+                            target,
+                            metadata_dict,
+                            h_pe_init=None):
         return self.model.module.forward_memory_target_with_states(
-            memory,
-                                  target,
-                                  metadata_dict=metadata_dict,
-                                  h_pe_init=h_pe_init)
+            memory, target, metadata_dict=metadata_dict, h_pe_init=h_pe_init)
 
     def forward_step(self, memory, target, metadata_dict, state, i, h_pe):
         return self.model.module.forward_step(memory, target, metadata_dict,
@@ -45,16 +46,15 @@ class EncoderDecoderHandler(Handler):
     def mask_source(self, source, masked_positions):
         return self.model.module.data_processor._mask_source(
             x=source, masked_positions=masked_positions)
-        
+
     @property
     def num_tokens_per_channel_target(self):
         return self.model.module.data_processor.num_tokens_per_channel_target
-    
+
     @property
     def num_channels_target(self):
         return self.model.module.data_processor.num_channels_target
 
-        
     def load(self, early_stopped):
         map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
         print(f'Loading models {self.__repr__()}')
@@ -64,23 +64,22 @@ class EncoderDecoderHandler(Handler):
         else:
             print('Load over-fitted model')
             model_dir = f'{self.model_dir}/overfitted'
-            
+
         state_dict = torch.load(f'{model_dir}/model',
                                 map_location=map_location)
-        
+
         # TODO, handle this properly
         # copy transformer_with_states during inference
-        
+
         transformer_with_states_dict = {}
         for k, v in state_dict.items():
             if 'transformer' in k:
-                new_key = k.replace('decoder.transformer', 'decoder.transformer_with_states')
+                new_key = k.replace('decoder.transformer',
+                                    'decoder.transformer_with_states')
                 transformer_with_states_dict[new_key] = v
         state_dict.update(transformer_with_states_dict)
 
-        self.model.load_state_dict(
-            state_dict=state_dict
-            )
+        self.model.load_state_dict(state_dict=state_dict)
 
     # ==== Training methods
     def epoch(
@@ -149,12 +148,7 @@ class EncoderDecoderHandler(Handler):
         return means
 
     # ===== Generation methods
-    def generate(self,
-                 source,
-                 metadata_dict,
-                 temperature,
-                 top_k=0,
-                 top_p=1.):
+    def generate(self, source, metadata_dict, temperature, top_k=0, top_p=1.):
         """Generate using the EncoderDecoder conditionned on source
 
         Args:
@@ -173,7 +167,7 @@ class EncoderDecoderHandler(Handler):
 
         # TODO hard coded value
         num_events = 1024
-        
+
         # TODO URGENT ORIGINAL TOKEN IN METADATA_DICT
 
         x = torch.zeros(batch_size, num_events,
@@ -219,8 +213,17 @@ class EncoderDecoderHandler(Handler):
                         new_pitch_index = np.random.choice(np.arange(
                             self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
-                        x[batch_index, event_index,
-                          channel_index] = int(new_pitch_index)
+
+                        # TODO ADD switch
+                        if metadata_dict['masked_positions'][
+                                batch_index, event_index,
+                                channel_index].item() == 0:
+                            x[batch_index, event_index,
+                              channel_index] = source[batch_index, event_index,
+                              channel_index]
+                        else:
+                            x[batch_index, event_index,
+                              channel_index] = int(new_pitch_index)
 
                     # update
                     xi = x[:, event_index, channel_index]
@@ -249,16 +252,15 @@ class EncoderDecoderHandler(Handler):
         ###############################
 
         return scores
-    
-    
+
     def generate_region(self,
-                 source,
-                 metadata_dict,
-                 temperature,
-                 start_event,
-                 end_event,
-                 top_k=0,
-                 top_p=1.):
+                        source,
+                        metadata_dict,
+                        temperature,
+                        start_event,
+                        end_event,
+                        top_k=0,
+                        top_p=1.):
         """Generate using the EncoderDecoder conditionned on source
 
         Args:
@@ -276,9 +278,8 @@ class EncoderDecoderHandler(Handler):
         assert self.recurrent
         self.eval()
         batch_size = source.size(0)
-        
-        num_events = end_event - start_event
 
+        num_events = end_event - start_event
 
         x = torch.zeros(batch_size, num_events,
                         self.num_channels_target).long().to(source.device)
@@ -347,10 +348,15 @@ class EncoderDecoderHandler(Handler):
                              temperature=temperature,
                              top_k=top_k,
                              top_p=top_p)
-        
-    def inpaint_region(self, x, start_event, end_event,
-                       masked_positions, 
-                       temperature=1.0, top_p=1., top_k=0):
+
+    def inpaint_region(self,
+                       x,
+                       start_event,
+                       end_event,
+                       masked_positions,
+                       temperature=1.0,
+                       top_p=1.,
+                       top_k=0):
         """Regenerated only tokens from x specified by masked_positions between start_event and end_event
 
         Args:
@@ -360,29 +366,28 @@ class EncoderDecoderHandler(Handler):
         source, _ = self.mask_source(x, masked_positions)
         metadata_dict = dict(original_sequence=x,
                              masked_positions=masked_positions)
-        region =  self.generate_region(
-            source,
-                             metadata_dict,
-                             start_event=start_event,
-                             end_event=end_event,
-                             temperature=temperature,
-                             top_k=top_k,
-                             top_p=top_p)
-        
-        output = torch.cat(
-            [
-                x[:, :start_event],
-                region,
-                x[:, end_event:]
-            ], dim=1
-        )
+        region = self.generate_region(source,
+                                      metadata_dict,
+                                      start_event=start_event,
+                                      end_event=end_event,
+                                      temperature=temperature,
+                                      top_k=top_k,
+                                      top_p=top_p)
+
+        output = torch.cat([x[:, :start_event], region, x[:, end_event:]],
+                           dim=1)
         # TODO save here
         beginning = x[:, :start_event]
         return output, region, beginning
 
-    def inpaint_region_optimized(self, x, start_event, end_event,
-                       masked_positions, 
-                       temperature=1.0, top_p=1., top_k=0):
+    def inpaint_region_optimized(self,
+                                 x,
+                                 start_event,
+                                 end_event,
+                                 masked_positions,
+                                 temperature=1.0,
+                                 top_p=1.,
+                                 top_k=0):
         """Regenerated only tokens from x specified by masked_positions between start_event and end_event
 
         Args:
@@ -390,11 +395,11 @@ class EncoderDecoderHandler(Handler):
             masked_positions (BoolTensor): same as x
         """
         self.eval()
-        assert self.recurrent        
+        assert self.recurrent
         source, _ = self.mask_source(x, masked_positions)
         metadata_dict = dict(original_sequence=x,
                              masked_positions=masked_positions)
-        
+
         with torch.no_grad():
             # compute state for autoregressive generation
             def extract_state_from_parallel_state(state_parallel, i):
@@ -405,21 +410,16 @@ class EncoderDecoderHandler(Handler):
                     # self attention
                     self_atn = state[0]
                     # extract -ith element on S and Z
-                    self_atn_x = [self_atn[0][:, i],
-                                    self_atn[1][:, i]]
-                            
-                    
-                    
+                    self_atn_x = [self_atn[0][:, i], self_atn[1][:, i]]
+
                     # cross attention (DIAGONAL ONLY)
                     cross_atn = state[1]
                     cross_atn_x = cross_atn[i].item()
-                    
-                    new_state = [
-                        self_atn_x, cross_atn_x
-                    ]
+
+                    new_state = [self_atn_x, cross_atn_x]
                     extracted_state.append(new_state)
                 return extracted_state
-                                                
+
             # Init
             # compute memory only once
             memory = self.forward_source(source, metadata_dict)
@@ -429,29 +429,33 @@ class EncoderDecoderHandler(Handler):
                 state = None
                 h_pe = None
                 xi = torch.zeros_like(x)[:, 0, 0]
-            else:                
+            else:
                 weights, _, state_parallel = self.forward_with_states(
-                            memory=memory,
-                            target=x,
-                            metadata_dict=metadata_dict
-                        )
+                    memory=memory, target=x, metadata_dict=metadata_dict)
                 state = extract_state_from_parallel_state(
-                    state_parallel, start_event * self.num_channels_target - 1
-                )
+                    state_parallel, start_event * self.num_channels_target - 1)
                 xi = x[:, start_event - 1, 3]
-            
+
             # compute h_pe
             if start_event == 0:
                 h_pe = None
             else:
-                target_embedded = self.model.module.data_processor.embed_target(x)
+                target_embedded = self.model.module.data_processor.embed_target(
+                    x)
 
                 # add positional embeddings
-                target_seq = flatten(target_embedded)[:, : self.num_channels_target * start_event]
-                metadata_dict_sliced = {k: v[:, :start_event] for 
-                                        k, v in metadata_dict.items()}
+                target_seq = flatten(
+                    target_embedded)[:, :self.num_channels_target *
+                                     start_event]
+                metadata_dict_sliced = {
+                    k: v[:, :start_event]
+                    for k, v in metadata_dict.items()
+                }
                 _, h_pe = self.model.module.positional_embedding_target(
-                target_seq, i=0, h=None, metadata_dict=metadata_dict_sliced)
+                    target_seq,
+                    i=0,
+                    h=None,
+                    metadata_dict=metadata_dict_sliced)
 
             batch_size, num_events_target, num_channels_source = x.size()
             # i corresponds to the position of the token BEING generated
@@ -469,13 +473,14 @@ class EncoderDecoderHandler(Handler):
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
-                                        
+
                     # TODO put this in a method so that it is applicable to all datasets
                     # exclude non note symbols:
                     exclude_symbols = ['START', 'END', 'XX']
                     for sym in exclude_symbols:
                         sym_index = self.dataloader_generator.dataset.value2index[
-                            self.dataloader_generator.features[channel_index]][sym]
+                            self.dataloader_generator.
+                            features[channel_index]][sym]
                         logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
@@ -487,13 +492,14 @@ class EncoderDecoderHandler(Handler):
                     filtered_logits = torch.stack(filtered_logits, dim=0)
                     # Sample from the filtered distribution
                     p = to_numpy(torch.softmax(filtered_logits, dim=-1))
-                    
 
                     # update generated sequence
                     for batch_index in range(batch_size):
                         new_pitch_index = np.random.choice(np.arange(
                             self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
+                        
+                        # TODO regenerate or not depending on masked_positions?
                         x[batch_index, event_index,
                           channel_index] = int(new_pitch_index)
 
@@ -684,14 +690,13 @@ class EncoderDecoderHandler(Handler):
                                                 path_no_extension))
 
         return scores
-    
-    
-    def test_decoder_with_states(self,                                 
-                 source,
-                 metadata_dict,
-                 temperature,
-                 top_k=0,
-                 top_p=1.):
+
+    def test_decoder_with_states(self,
+                                 source,
+                                 metadata_dict,
+                                 temperature,
+                                 top_k=0,
+                                 top_p=1.):
         """Generate using the EncoderDecoder conditionned on source
 
         Args:
@@ -707,7 +712,7 @@ class EncoderDecoderHandler(Handler):
         assert self.recurrent
         self.eval()
         batch_size = source.size(0)
-        
+
         import timeit
         start = timeit.default_timer()
 
@@ -718,11 +723,10 @@ class EncoderDecoderHandler(Handler):
             state = None
             h_pe = None
             xi = torch.zeros_like(x)[:, 0, 0]
-            
-            
+
             # # compute memory only once
             memory = self.forward_source(source, metadata_dict)
-            
+
             # compute state for autoregressive generation
             def extract_state_from_parallel_state(state_parallel, i):
                 extracted_state = []
@@ -732,42 +736,39 @@ class EncoderDecoderHandler(Handler):
                     # self attention
                     self_atn = state[0]
                     # extract -ith element on S and Z
-                    self_atn_x = [self_atn[0][:, i],
-                                    self_atn[1][:, i]]
-                            
-                    
-                    
+                    self_atn_x = [self_atn[0][:, i], self_atn[1][:, i]]
+
                     # cross attention (DIAGONAL ONLY)
                     cross_atn = state[1]
                     cross_atn_x = cross_atn[i].item()
-                    
-                    new_state = [
-                        self_atn_x, cross_atn_x
-                    ]
+
+                    new_state = [self_atn_x, cross_atn_x]
                     extracted_state.append(new_state)
                 return extracted_state
-                                    
+
             weights, _, state_parallel = self.forward_with_states(
-                        memory=memory,
-                        target=x,
-                        metadata_dict=metadata_dict
-                    )
-                    
-            state = extract_state_from_parallel_state(
-                state_parallel, 399
-            )
+                memory=memory, target=x, metadata_dict=metadata_dict)
+
+            # TODO which one?!
+            state = extract_state_from_parallel_state(state_parallel, 399)
+            # state = extract_state_from_parallel_state(state_parallel, 400)
             xi = x[:, 99, 3]
-            
+
             # compute h_pe
             batch_size, num_events_target, num_channels_source = x.size()
             target_embedded = self.model.module.data_processor.embed_target(x)
 
             # add positional embeddings
             target_seq = flatten(target_embedded)[:, :4 * 100]
-            metadata_dict_sliced = {k: v[:, :100] for 
-                                    k, v in metadata_dict.items()}
+            metadata_dict_sliced = {
+                k: v[:, :100]
+                for k, v in metadata_dict.items()
+            }
             _, h_pe = self.model.module.positional_embedding_target(
-            target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
+                target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
+            
+            # TODO PROBLEM HERE
+            # index 400 being computed twice?!
 
             # i corresponds to the position of the token BEING generated
             for event_index in range(100, 200):
@@ -784,6 +785,15 @@ class EncoderDecoderHandler(Handler):
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
+                    
+                    # TODO put this in a method so that it is applicable to all datasets
+                    # exclude non note symbols:
+                    exclude_symbols = ['START', 'END', 'XX']
+                    for sym in exclude_symbols:
+                        sym_index = self.dataloader_generator.dataset.value2index[
+                            self.dataloader_generator.
+                            features[channel_index]][sym]
+                        logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
                     for logit in logits:
@@ -794,7 +804,6 @@ class EncoderDecoderHandler(Handler):
                     filtered_logits = torch.stack(filtered_logits, dim=0)
                     # Sample from the filtered distribution
                     p = to_numpy(torch.softmax(filtered_logits, dim=-1))
-                    
 
                     # update generated sequence
                     for batch_index in range(batch_size):
@@ -808,14 +817,11 @@ class EncoderDecoderHandler(Handler):
                     xi = x[:, event_index, channel_index]
                     h_pe = forward_pass['h_pe']
                     state = forward_pass['state']
-                
+
         stop = timeit.default_timer()
         print(f'Time {stop - start}s')
         # add original
-        x = torch.cat([
-            source.cpu(),
-            x.cpu()
-        ], dim=0)
+        x = torch.cat([source.cpu(), x.cpu()], dim=0)
         # to score
         original_and_reconstruction = self.data_processor.postprocess(x.cpu())
 

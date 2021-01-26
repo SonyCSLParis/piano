@@ -9,6 +9,7 @@ class PianoDataloaderGenerator(DataloaderGenerator):
     def __init__(self,
                  sequences_size,
                  transformations,
+                 pad_before,
                  *args, **kwargs):
         legacy = True
 
@@ -29,7 +30,8 @@ class PianoDataloaderGenerator(DataloaderGenerator):
             time_dilation_factor=0.1,
             velocity_shift=20,
             transformations=transformations,
-            different_time_table_ts_duration=not legacy
+            different_time_table_ts_duration=not legacy,
+            pad_before=pad_before
         )
         
         super(PianoDataloaderGenerator, self).__init__(dataset=dataset)
@@ -77,6 +79,8 @@ class PianoDataloaderGenerator(DataloaderGenerator):
     
     def get_elapsed_time(self, x):
         """
+        This function only returns the aggregated sum,
+        it's not properly said the elapsed time
         x is (batch_size, num_events, num_channels)
         """
         assert 'time_shift' in self.features
@@ -88,4 +92,7 @@ class PianoDataloaderGenerator(DataloaderGenerator):
             smallest_time_shift=0.02
         )
         return y.cumsum(dim=-1)
+    
+    def get_feature_index(self, feature_name):
+        return self.features.index(feature_name)
         

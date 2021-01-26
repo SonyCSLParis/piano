@@ -3,3 +3,4 @@ from .channel_embeddings import ChannelEmbeddings
 from .learnt_embeddings import LearntEmbeddings
 from .sinusoidal_elapsed_time_embedding import SinusoidalElapsedTimeEmbedding
 from .sinusoidal_positional_embedding import SinusoidalPositionalEmbedding
+from .sinusoidal_progress_bar_embedding import SinusoidalProgressBarEmbedding
