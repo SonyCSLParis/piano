@@ -63,7 +63,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         # add embedding_dim to elapsed time
         elapsed_time = elapsed_time.unsqueeze(2)
         
-        # TODO scale?!
+        # TODO scale?! only 10?!
         elapsed_time = elapsed_time * 100
         h = h * 100
         
@@ -104,7 +104,9 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
 
     def forward_step(self, x, i=0, h=None, metadata_dict={}):
         # TODO add 'decoding_start'
-        assert 'decoding_start' in metadata_dict
+        # assert 'decoding_start' in metadata_dict
+        
+        
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
         
