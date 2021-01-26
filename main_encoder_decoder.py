@@ -153,9 +153,13 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     x = next(generator_val)['x']
     _, x, _ = data_processor.preprocess(x)
     x = x.repeat(1, 1, 1)
+    
     masked_positions = torch.zeros_like(x)
-    # inpainting
-    masked_positions[0:, 100:200] = 1
+    # inpainting    # But no longer needed!
+    masked_positions[:, 100:200] = 1
+    
+    # masked_positions[1:, 600:700] = 1
+    # masked_positions[1:, 1000:]
     
     # unconstrained:
     # masked_positions[1:, :] = 1
