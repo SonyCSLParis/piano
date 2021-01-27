@@ -324,6 +324,7 @@ def json_to_tensor(json_note_list, seconds_per_beat,
     
     # Recompute time shifts in the selected_region
     # Set correct time shifts and compute masked_positions
+    # TODO THIS CAN BE NEGATIVE!
     start_time = d['time'][event_start]
     end_time = selected_region['end'] * seconds_per_beat
     num_events_to_compose = event_end - event_start
