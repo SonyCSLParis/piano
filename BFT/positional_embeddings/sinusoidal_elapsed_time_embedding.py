@@ -103,9 +103,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         return x_embed, h
 
     def forward_step(self, x, i=0, h=None, metadata_dict={}):
-        # TODO add 'decoding_start'
-        # assert 'decoding_start' in metadata_dict
-        
         
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
@@ -153,5 +150,10 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             elapsed_time = elapsed_time * 100
             
             h = h + elapsed_time
+        
+        # TODO check this
+        if 'decoding_start' in metadata_dict:
+            if i % self.num_channels == metadata_dict['decoding_start']:
+                h = torch.zeros_like(h)
         
         return x_embed, h
