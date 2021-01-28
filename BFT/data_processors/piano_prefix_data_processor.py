@@ -297,14 +297,15 @@ class PianoPrefixDataProcessor(DataProcessor):
         }
         return y, metadata_dict
 
-    def postprocess(self, reconstruction, original=None):
-        if original is not None:
-            # Just concatenate along batch dimension original and reconstruction
-            original = original.long()
-            tensor_score = torch.cat(
-                [original[0].unsqueeze(0),
-                 reconstruction.cpu()], dim=0)
-            #  Add a first empty dimension as everything will be written in one score
-            return tensor_score.unsqueeze(0)
-        else:
-            return reconstruction
+    def postprocess(self, x, decoding_end, metadata_dict):
+        decoding_start = metadata_dict['decoding_start']
+        # put all pieces in order:
+        x = torch.cat(
+            [
+            x[:, :self.num_events_before],
+            x[:, decoding_start: decoding_end],
+            x[:, self.num_events_before + 1: self.num_events_before + 1 + self.num_events_after]
+            ]
+            , dim=1
+        )
+        return x
