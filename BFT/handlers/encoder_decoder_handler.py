@@ -442,7 +442,7 @@ class EncoderDecoderHandler(Handler):
             else:
                 target_embedded = self.model.module.data_processor.embed_target(
                     x)
-
+                # TODO still might be wrong
                 # add positional embeddings
                 target_seq = flatten(
                     target_embedded)[:, :self.num_channels_target *
