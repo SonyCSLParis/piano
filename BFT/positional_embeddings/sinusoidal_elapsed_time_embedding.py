@@ -38,9 +38,9 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         
             
         h = elapsed_time[:, -1] 
-        if 'decoding_start' in metadata_dict:
+        if elapsed_time.size(1) >= metadata_dict['decoding_start']:
             h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
-            
+
         
         # add zeros
         elapsed_time = torch.cat(            
@@ -53,11 +53,12 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         
         # check if in prefix mode:
         if 'decoding_start' in metadata_dict:
-            # we need to have an offset for the generated inpainted region
-            elapsed_time[:, metadata_dict['decoding_start']:] = (
-                elapsed_time[:, metadata_dict['decoding_start']:] -
-                elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
-            )
+            if elapsed_time.size(1) > metadata_dict['decoding_start'] :
+                # we need to have an offset for the generated inpainted region
+                elapsed_time[:, metadata_dict['decoding_start']:] = (
+                    elapsed_time[:, metadata_dict['decoding_start']:] -
+                    elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
+                )
 
         
         # add embedding_dim to elapsed time
@@ -153,7 +154,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         
         # TODO check this
         if 'decoding_start' in metadata_dict:
-            if i % self.num_channels == metadata_dict['decoding_start']:
+            if i == self.num_channels * metadata_dict['decoding_start'] - 1:
                 h = torch.zeros_like(h)
         
         return x_embed, h
