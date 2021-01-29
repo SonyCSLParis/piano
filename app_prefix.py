@@ -455,7 +455,7 @@ def ableton_to_tensor(ableton_note_list,
     placeholder_duration = cuda_variable(torch.Tensor([placeholder_duration]))
     global data_processor
 
-    placeholder = data_processor.compute_placeholder(
+    placeholder, placeholder_duration_token = data_processor.compute_placeholder(
         placeholder_duration=placeholder_duration, batch_size=1)
 
     # delete unnecessary entries in dict

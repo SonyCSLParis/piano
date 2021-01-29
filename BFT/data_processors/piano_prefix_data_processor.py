@@ -119,8 +119,7 @@ class PianoPrefixDataProcessor(DataProcessor):
             middle)[:, -1]
 
         # === Compute Placeholder
-        # TODO all of these methods should be directly accessible in piano_midi_dataset
-        placeholder = self.compute_placeholder(placeholder_duration=placeholder_duration,
+        placeholder, placeholder_duration_token = self.compute_placeholder(placeholder_duration=placeholder_duration,
                                                batch_size=batch_size)
 
 
@@ -301,7 +300,7 @@ class PianoPrefixDataProcessor(DataProcessor):
         placeholder[:, 0,
                     self.dataloader_generator.get_feature_index(
                         'time_shift')] = placeholder_duration_token
-        return placeholder
+        return placeholder, placeholder_duration_token
     
     def postprocess(self, x, decoding_end, metadata_dict):
         decoding_start = metadata_dict['decoding_start']
