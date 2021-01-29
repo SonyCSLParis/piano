@@ -251,7 +251,7 @@ class DecoderPrefixHandler(Handler):
 
         return scores
         
-    def inpaint(self, x, temperature=1., top_p=1., top_k=0):
+    def test_inpaint(self, x, temperature=1., top_p=1., top_k=0):
         # TODO add arguments to preprocess
         true_x = x.clone()
         x, metadata_dict =  self.data_processor.preprocess(x)
@@ -418,6 +418,157 @@ class DecoderPrefixHandler(Handler):
         ###############################
 
         return scores
+    
+    
+    def inpaint(self, x,
+                metadata_dict,
+                num_max_generated_events=None,
+                temperature=1., top_p=1., top_k=0):
+        """x is already in the right "prefix" format
+
+        Args:
+            x ([type]): [description]
+            metadata_dict ([type]): [description]
+            num_max_generated_events ([type], optional): [description]. Defaults to None.
+            temperature ([type], optional): [description]. Defaults to 1..
+            top_p ([type], optional): [description]. Defaults to 1..
+            top_k (int, optional): [description]. Defaults to 0.
+
+        Returns:
+            [type]: [description]
+        """
+        # original_x = x.clone()
+        
+        print(f'Placeholder duration: {metadata_dict["placeholder_duration"]}')
+        
+        assert self.recurrent
+        self.eval()
+        batch_size, num_events, _ = x.size()
+            
+        
+        # TODO only works with batch_size=1 at present
+        assert x.size(0) == 1
+
+        decoding_end = None
+        decoding_start_event = metadata_dict['decoding_start']
+        if num_max_generated_events is None:
+            decoding_end_event = num_events
+        else:
+            decoding_end_event = decoding_start_event + num_max_generated_events
+
+        
+        with torch.no_grad():
+            def extract_state_from_parallel_state(state_parallel, i):
+                extracted_state = []
+                for state in state_parallel:
+                    # iterate on layers
+                    # extract -ith element on S and Z
+                    self_atn_x = [state[0][:, i], state[1][:, i]]
+                    extracted_state.append(self_atn_x)
+                return extracted_state
+                        
+            # init:
+            # compute state 
+            _, _, state_parallel = self.forward_with_states(target=x, metadata_dict=metadata_dict)
+            state = extract_state_from_parallel_state(
+                state_parallel=state_parallel,
+                i=decoding_start_event * self.num_channels_target - 1
+            )
+            xi = x[:, decoding_start_event - 1, self.num_channels_target - 1]
+            target_embedded = self.model.module.data_processor.embed(
+                    x)
+
+            # compute positional embeddings, i.e. h_pe
+            # TODO -1 HERE ?! 
+            # TODO COMPUTE EXACTLY! NEEDS TO PERFORM FORWARD_STEPS
+            target_seq = flatten(
+                target_embedded)[:, :self.num_channels_target *
+                                    (decoding_start_event - 1)]
+                
+            metadata_dict_sliced = metadata_dict.copy()
+            # AND -1 HERE!
+            metadata_dict_sliced['original_sequence'] = metadata_dict['original_sequence'][:, :decoding_start_event - 1] 
+            _, h_pe = self.model.module.positional_embedding(
+                target_seq,
+                i=0,
+                h=None,
+                metadata_dict=metadata_dict_sliced)
+            
+            for channel_index in range(self.num_channels_target - 1):
+                original_token = x[:, decoding_start_event - 1, channel_index]
+                original_token_embedded = self.model.module.data_processor.embed_step(original_token, channel_index)
+                metadata_dict['original_token'] = original_token
+                _, h_pe = self.model.module.positional_embedding.forward_step(
+                    original_token_embedded,
+                    i=(decoding_start_event -1) * self.num_channels_target + channel_index,
+                    h=h_pe,
+                    metadata_dict=metadata_dict
+                )            
+
+            # i corresponds to the position of the token BEING generated
+            for event_index in range(decoding_start_event, decoding_end_event):
+                for channel_index in range(self.num_channels_target):
+                    i = event_index * self.num_channels_target + channel_index
+                    print(f'{i} : {h_pe}')
+
+                    forward_pass = self.forward_step(
+                        xi,
+                        metadata_dict=metadata_dict,
+                        state=state,
+                        i=i,
+                        h_pe=h_pe)
+                    weights = forward_pass['weights']
+
+                    logits = weights / temperature
+
+                    filtered_logits = []
+                    for logit in logits:
+                        filter_logit = top_k_top_p_filtering(logit,
+                                                             top_k=top_k,
+                                                             top_p=top_p)
+                        filtered_logits.append(filter_logit)
+                    filtered_logits = torch.stack(filtered_logits, dim=0)
+                    # Sample from the filtered distribution
+                    p = to_numpy(torch.softmax(filtered_logits, dim=-1))
+
+                    # update generated sequence
+                    for batch_index in range(batch_size):
+                        if event_index >= decoding_start_event:
+                            new_pitch_index = np.random.choice(np.arange(
+                                self.num_tokens_per_channel_target[channel_index]),
+                                                            p=p[batch_index])
+                            x[batch_index, event_index,
+                            channel_index] = int(new_pitch_index)
+                            
+                            end_symbol_index = self.dataloader_generator.dataset.value2index[
+                            self.dataloader_generator.features[channel_index]]['END']
+                            if end_symbol_index == int(new_pitch_index):
+                                decoding_end = event_index
+                    
+
+                    # update
+                    xi = x[:, event_index, channel_index]
+                    h_pe = forward_pass['h_pe']
+                    state = forward_pass['state']
+
+                if decoding_end is not None:
+                    break
+        
+        
+        if decoding_end is None:
+            done = False
+            decoding_end = decoding_end_event
+        else:
+            done = True            
+        
+        # original_and_reconstruction = self.data_processor.postprocess(
+        #     x.cpu(),
+        #     decoding_end,
+        #     metadata_dict
+        #     )
+        
+        generated_region = x[:, decoding_start_event:decoding_end]
+        return generated_region, done
         
         
         

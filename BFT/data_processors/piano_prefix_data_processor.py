@@ -120,20 +120,9 @@ class PianoPrefixDataProcessor(DataProcessor):
 
         # === Compute Placeholder
         # TODO all of these methods should be directly accessible in piano_midi_dataset
-        placeholder_duration_token = cuda_variable(
-            torch.Tensor([
-                self.dataloader_generator.dataset.value2index['time_shift']
-                [find_nearest_value(
-                    self.dataloader_generator.dataset.time_table_time_shift,
-                    pd.item())] for pd in placeholder_duration
-            ]))
+        placeholder = self.compute_placeholder(placeholder_duration=placeholder_duration,
+                                               batch_size=batch_size)
 
-        # placeholder is batch_size, 1, 4
-        placeholder = self.placeholder_symbols.unsqueeze(0).unsqueeze(
-            0).repeat(batch_size, 1, 1)
-        placeholder[:, 0,
-                    self.dataloader_generator.get_feature_index(
-                        'time_shift')] = placeholder_duration_token
 
         new_before_list, new_middle_list, new_after_list = [], [], []
 
@@ -297,6 +286,23 @@ class PianoPrefixDataProcessor(DataProcessor):
         }
         return y, metadata_dict
 
+    def compute_placeholder(self, placeholder_duration, batch_size):
+        placeholder_duration_token = cuda_variable(
+            torch.Tensor([
+                self.dataloader_generator.dataset.value2index['time_shift']
+                [find_nearest_value(
+                    self.dataloader_generator.dataset.time_table_time_shift,
+                    pd.item())] for pd in placeholder_duration
+            ]))
+
+        # placeholder is batch_size, 1, 4
+        placeholder = self.placeholder_symbols.unsqueeze(0).unsqueeze(
+            0).repeat(batch_size, 1, 1)
+        placeholder[:, 0,
+                    self.dataloader_generator.get_feature_index(
+                        'time_shift')] = placeholder_duration_token
+        return placeholder
+    
     def postprocess(self, x, decoding_end, metadata_dict):
         decoding_start = metadata_dict['decoding_start']
         # put all pieces in order:
