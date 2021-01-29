@@ -20,6 +20,9 @@ class NESDataloader(DataloaderGenerator):
     @property
     def sequence_size(self):
         return self.sequences_size
+    
+    def get_feature_index(self, feature_name):
+        return self.features.index(feature_name)
         
     def write(self, x, path):
         tensor_dict = {feature: x[:, feature_index] for feature_index, feature in
