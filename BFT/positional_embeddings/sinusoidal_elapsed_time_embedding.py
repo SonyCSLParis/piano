@@ -38,8 +38,10 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         
             
         h = elapsed_time[:, -1] 
-        if elapsed_time.size(1) >= metadata_dict['decoding_start']:
-            h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
+        # if prefix mode
+        if 'decoding_start' in metadata_dict:
+            if elapsed_time.size(1) >= metadata_dict['decoding_start']:
+                h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
 
         
         # add zeros
