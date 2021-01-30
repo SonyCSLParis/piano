@@ -442,13 +442,15 @@ class EncoderDecoderHandler(Handler):
             else:
                 target_embedded = self.model.module.data_processor.embed_target(
                     x)
-                # TODO still might be wrong
                 # add positional embeddings
+                # Since h_pe is only updated every num_channel_target steps,
+                # we can compute it at location self.num_channels_target *
+                #  (start_event - 1)
                 target_seq = flatten(
                     target_embedded)[:, :self.num_channels_target *
-                                     start_event]
+                                     (start_event - 1)]
                 metadata_dict_sliced = {
-                    k: v[:, :start_event]
+                    k: v[:, :start_event - 1]
                     for k, v in metadata_dict.items()
                 }
                 _, h_pe = self.model.module.positional_embedding_target(
