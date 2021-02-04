@@ -23,7 +23,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
     def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         assert i == 0
         if h is None:
-            h = torch.zeros_like(x_embed[:, 0, 0])
+            h = torch.zeros((x_embed.size(0),)).to(x_embed.device)
         assert 'original_sequence' in metadata_dict, (
             'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
         )
