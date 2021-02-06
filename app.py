@@ -67,8 +67,8 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
-    os.environ['MASTER_PORT'] = '12356'
-    # os.environ['MASTER_PORT'] = '12357'
+    # os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12357'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -520,6 +520,7 @@ def ableton_to_tensor(ableton_note_list,
     d = {k: t.numpy() for k, t in d.items()}
 
     # We overpad
+    # TODO no start symbol...
     d = handler.dataloader_generator.dataset.add_start_end_symbols(
         sequence=d, start_time=0, sequence_size=1024 + 512)
 
