@@ -29,14 +29,11 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         )
         x = metadata_dict['original_sequence']
         batch_size, num_events, num_channels = x.size()
-        # batch_size, num_tokens, embedding_dim = x_embed.size()
-        
-        
+            
         elapsed_time = self.dataloader_generator.get_elapsed_time(
             x
         )
         
-            
         h = elapsed_time[:, -1] 
         # if prefix mode
         if 'decoding_start' in metadata_dict:
@@ -52,6 +49,7 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             ],
             dim=1
         )
+
         
         # check if in prefix mode:
         if 'decoding_start' in metadata_dict:

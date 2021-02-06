@@ -437,7 +437,7 @@ class EncoderDecoderHandler(Handler):
                 xi = x[:, start_event - 1, 3]
 
             # compute h_pe
-            if start_event == 0:
+            if start_event <= 1:
                 h_pe = None
             else:
                 target_embedded = self.model.module.data_processor.embed_target(
