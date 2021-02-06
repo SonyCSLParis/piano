@@ -111,8 +111,10 @@ def categorical_crossentropy(value, target, mask=None, label_smoothing=False):
             log_prb = nn.functional.log_softmax(probs, dim=1)
             ce = -(one_hot * log_prb).sum(dim=1)
         sum = sum + ce.sum()
+        
     # divide by the total number of tokens
-    sum = sum / mask.sum()
+    if mask.sum() > 0:
+        sum = sum / mask.sum()
     return sum
 
 

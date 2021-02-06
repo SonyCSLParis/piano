@@ -2,21 +2,15 @@ from pathlib import Path
 
 config = {
     'training_method':             'decoder',
-    'dataset':                     'piano',
+    'dataset':                     'nes',
 
     # --- Dataloader ---
     'dataloader_generator_kwargs': dict(
         sequences_size=1024,
-        transformations={
-            'time_dilation':  True,
-            'velocity_shift': True,
-            'transposition':  True
-        },
-        pad_before=True,
-    ),  # Can be different from the encoder's data loader
+    ), 
 
     # --- DataProcessor ---
-    'data_processor_type':         'piano_prefix',  # can be used to filter out some channels
+    'data_processor_type':         'piano_prefix', 
     'data_processor_kwargs':       dict(
         embedding_size=64,
         num_events_before=256,
@@ -60,14 +54,14 @@ config = {
     'decoder_kwargs':              dict(
         d_model=512,
         n_head=8,
-        num_decoder_layers=16,
+        num_decoder_layers=8,
         dim_feedforward=1024,
         dropout=0.1,
         label_smoothing=False
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  2,
+    'batch_size':                  4,
     'num_batches':                 256,
     'num_epochs':                  2000,
 

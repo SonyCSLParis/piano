@@ -39,8 +39,12 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
         zeros_location = (placeholder_duration < 0.01)
         
         h = elapsed_time[:, -1] 
-        h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
-        # TODO check it's almost 100
+        
+        if elapsed_time.size(1) >= metadata_dict['decoding_start']:
+            h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
+        else:
+            h = torch.zeros_like(h)
+        
         h = h / placeholder_duration * 100
         
         h[zeros_location] = 100
@@ -53,11 +57,11 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
             ],
             dim=1
         )
-        
-        elapsed_time[:, metadata_dict['decoding_start']:] = (
-            elapsed_time[:, metadata_dict['decoding_start']:] -
-            elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
-        ) / placeholder_duration.unsqueeze(1) * 100
+        if metadata_dict['decoding_start'] < elapsed_time.size(1):
+            elapsed_time[:, metadata_dict['decoding_start']:] = (
+                elapsed_time[:, metadata_dict['decoding_start']:] -
+                elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
+            ) / placeholder_duration.unsqueeze(1) * 100
     
         # TODO no progress bar for prefixes?!
         elapsed_time[:, :metadata_dict['decoding_start']] = 0
@@ -88,8 +92,7 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
         return x_embed, h
 
     def forward_step(self, x, i=0, h=None, metadata_dict={}):
-        # TODO add 'decoding_start'
-        # TODO write method
+
         assert 'decoding_start' in metadata_dict
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
@@ -99,7 +102,7 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
         )
 
         batch_size = x.size(0)
-        # h represents the elapsed time
+        # h represents the progress in %
         if h is None:
             h = torch.zeros((batch_size, )).to(x.device)
             
@@ -132,10 +135,21 @@ class SinusoidalProgressBarEmbedding(BasePositionalEmbedding):
             target
         )
             elapsed_time = elapsed_time.squeeze(1)
+            # TODO check
+            # scale by correct amount
+            placeholder_duration = metadata_dict['placeholder_duration']
+            zeros_location = (placeholder_duration < 0.01)
             
-            # TODO scale?!
-            elapsed_time = elapsed_time * 100
+            # if i // self.num_channels < metadata_dict['decoding_start']:
+            #     elapsed_time = torch.zeros_like(elapsed_time)
             
-            h = h + elapsed_time
+            if i // self.num_channels < metadata_dict['decoding_start']:
+                h = torch.zeros_like(elapsed_time)
+            else:
+                elapsed_time = elapsed_time / placeholder_duration * 100
+                h = h + elapsed_time
+                h[zeros_location] = 100                    
+            
+            
         
         return x_embed, h

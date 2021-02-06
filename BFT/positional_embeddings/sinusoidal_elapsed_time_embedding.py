@@ -23,24 +23,23 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
     def forward(self, x_embed, i=0, h=None, metadata_dict={}):
         assert i == 0
         if h is None:
-            h = torch.zeros_like(x_embed[:, 0, 0])
+            h = torch.zeros((x_embed.size(0),)).to(x_embed.device)
         assert 'original_sequence' in metadata_dict, (
             'Dictionnary metadata_dict must contain entry "original_sequence" in order to compute the elapsed time' 
         )
         x = metadata_dict['original_sequence']
         batch_size, num_events, num_channels = x.size()
-        # batch_size, num_tokens, embedding_dim = x_embed.size()
-        
-        
+            
         elapsed_time = self.dataloader_generator.get_elapsed_time(
             x
         )
         
-            
         h = elapsed_time[:, -1] 
+        # if prefix mode
         if 'decoding_start' in metadata_dict:
-            h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
-            
+            if elapsed_time.size(1) >= metadata_dict['decoding_start']:
+                h = h - elapsed_time[:, metadata_dict['decoding_start'] - 1]
+
         
         # add zeros
         elapsed_time = torch.cat(            
@@ -50,14 +49,16 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             ],
             dim=1
         )
+
         
         # check if in prefix mode:
         if 'decoding_start' in metadata_dict:
-            # we need to have an offset for the generated inpainted region
-            elapsed_time[:, metadata_dict['decoding_start']:] = (
-                elapsed_time[:, metadata_dict['decoding_start']:] -
-                elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
-            )
+            if elapsed_time.size(1) > metadata_dict['decoding_start'] :
+                # we need to have an offset for the generated inpainted region
+                elapsed_time[:, metadata_dict['decoding_start']:] = (
+                    elapsed_time[:, metadata_dict['decoding_start']:] -
+                    elapsed_time[:, metadata_dict['decoding_start']].unsqueeze(1)
+                )
 
         
         # add embedding_dim to elapsed time
@@ -103,9 +104,6 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
         return x_embed, h
 
     def forward_step(self, x, i=0, h=None, metadata_dict={}):
-        # TODO add 'decoding_start'
-        # assert 'decoding_start' in metadata_dict
-        
         
         # time_shift must be the last feature
         assert self.dataloader_generator.features.index('time_shift') == len(self.dataloader_generator.features) - 1
@@ -153,5 +151,10 @@ class SinusoidalElapsedTimeEmbedding(BasePositionalEmbedding):
             elapsed_time = elapsed_time * 100
             
             h = h + elapsed_time
+        
+        # TODO check this
+        if 'decoding_start' in metadata_dict:
+            if i == self.num_channels * metadata_dict['decoding_start'] - 1:
+                h = torch.zeros_like(h)
         
         return x_embed, h

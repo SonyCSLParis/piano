@@ -72,8 +72,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
          model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
-    # os.environ['MASTER_PORT'] = '12355'
-    os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12355'
+    # os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
     # os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
@@ -95,14 +95,13 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # positional embedding
     positional_embedding: PositionalEmbedding = get_positional_embedding(
         dataloader_generator=dataloader_generator,
-        positional_embedding_dict=config['positional_embedding_dict']
-    )
-    
+        positional_embedding_dict=config['positional_embedding_dict'])
+
     # sos embedding
     sos_embedding = get_sos_embedding(
         dataloader_generator=dataloader_generator,
         sos_embedding_dict=config['sos_embedding_dict'])
-    
+
     decoder = get_decoder(data_processor=data_processor,
                           dataloader_generator=dataloader_generator,
                           positional_embedding=positional_embedding,
@@ -113,8 +112,8 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
 
     decoder.to(device)
     decoder = DistributedDataParallel(module=decoder,
-                                        device_ids=[rank],
-                                        output_device=rank)
+                                      device_ids=[rank],
+                                      output_device=rank)
 
     decoder_handler = DecoderPrefixHandler(
         model=decoder,
@@ -123,10 +122,10 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
 
     if load:
         if overfitted:
-            decoder_handler.load(early_stopped=False)
+            decoder_handler.load(early_stopped=False, recurrent=not train)
         else:
-            decoder_handler.load(early_stopped=True)
-            
+            decoder_handler.load(early_stopped=True, recurrent=not train)
+
     if train:
         decoder_handler.train_model(
             batch_size=config['batch_size'],
@@ -138,55 +137,27 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         )
         exit()
 
-    # scores = decoder.generate_non_recurrent(
-    #     temperature=1.,
-    #     batch_size=3,
-    #     top_p=0.9,
-    #     top_k=0)
+    (generator_train, generator_val,
+     _) = dataloader_generator.dataloaders(batch_size=1,
+                                           num_workers=num_workers,
+                                           shuffle_val=True)
+    original_x = next(generator_val)['x']
+    x, metadata_dict = data_processor.preprocess(original_x)
+    x_inpainted, generated_region, done = decoder_handler.inpaint(
+        x=x, metadata_dict=metadata_dict, temperature=1., top_p=0.9, top_k=0)
 
-    # scores = decoder_handler.generate_completion(num_completions=3,
-    #                                      temperature=1.,
-    #                                      top_p=0.9,
-    #                                      top_k=0,
-    #                                      midi_file='inputs/Test_X_1.mid')
-    scores = decoder_handler.generate(
-        metadata_dict={},
-        temperature=1.,
-                              batch_size=10,
-                              top_p=0.92,
-                              top_k=0)
-    # midi_file = 'inputs/br_rhap_format0.mid')
-    # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
-    # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/Denisova04.MID')
-
-    # for score in scores:
-    #     score.show()
-
-    # scores = decoder.generate_reharmonisation(
-    #     temperature=1.0,
-    #     num_reharmonisations=3,
-    #     top_k=0,
-    #     top_p=0.8
-    # )
-    # for score in scores:
-    #     score.show()
-
-    # # Body code: need do check cluster before adding values
-    # start_cluster = 7
-    # end_cluster = 21
-    # pad_cluster = 12
-    #
-    # start_codes = [pad_cluster] * 5 + [start_cluster]
-    # end_codes = [end_cluster] + [pad_cluster] * 5
-    # body_codes = [1] * 16   # put what u want here
-    # scores = decoder.generate_alla_mano(
-    #     start_codes=start_codes,
-    #     end_codes=end_codes,
-    #     body_codes=body_codes,
-    #     temperature=1.2,
-    # )
-    # for score in scores:
-    #     score.show()
+    # Saving
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+    if not os.path.exists(f'{decoder_handler.model_dir}/generations'):
+        os.mkdir(f'{decoder_handler.model_dir}/generations')
+    for k, tensor_score in enumerate(x_inpainted):
+        path_no_extension = f'{decoder_handler.model_dir}/generations/{timestamp}_{k}'
+        decoder_handler.dataloader_generator.write(tensor_score,
+                                                   path_no_extension)
+    for k, tensor_score in enumerate(original_x):
+        path_no_extension = f'{decoder_handler.model_dir}/generations/{timestamp}_{k}_original'
+        decoder_handler.dataloader_generator.write(tensor_score,
+                                                   path_no_extension)
 
 
 if __name__ == '__main__':

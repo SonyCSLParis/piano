@@ -196,6 +196,48 @@ class CausalEncoder(nn.Module):
                     'loss': loss.item()
                 }
             }
+            
+    def forward_with_states(self, target, metadata_dict, h_pe_init=None):
+        """
+        :param target: sequence of tokens (batch_size, num_events, num_channels)
+        :return:
+        """
+        batch_size, num_events, num_channels = target.size()
+        
+        target_embedded = self.data_processor.embed(target)
+        target_seq = flatten(target_embedded)
+        
+        # add positional embeddings
+        target_seq, h_pe = self.positional_embedding(target_seq, i=0, h=h_pe_init, metadata_dict=metadata_dict)
+        target_seq = self.linear_target(target_seq)
+
+
+        # shift target_seq by one
+        # Pad
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
+        target_seq = torch.cat(
+            [
+                dummy_input_target,
+                target_seq
+            ],
+            dim=1)
+        target_seq = target_seq[:, :-1]
+
+        output, states = self.transformer.forward_with_states(
+            target_seq
+        )
+
+        output = output.view(batch_size,
+                             -1,
+                             self.num_channels_target,
+                             self.d_model)
+        weights_per_category = [
+            pre_softmax(t[:, :, 0, :])
+            for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
+        ]
+        return weights_per_category, h_pe, states
+
+
 
     def forward_step(self, target, metadata_dict, state, i, h_pe):
         """
@@ -211,7 +253,8 @@ class CausalEncoder(nn.Module):
             target_seq = self.sos_embedding(metadata_dict)
         else:
             channel_index_input = (i - 1) % self.num_channels_target
-            target = self.data_processor.preprocess(target)
+            # TODO preprocess is not necessarily applicable to target
+            # target = self.data_processor.preprocess(target)
             target_embedded = self.data_processor.embed_step(
                 target,
                 channel_index=channel_index_input)
