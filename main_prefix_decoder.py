@@ -72,10 +72,10 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
          model_dir):
     # === Init process group
     os.environ['MASTER_ADDR'] = 'localhost'
-    # os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12355'
     # os.environ['MASTER_PORT'] = '12356'
     # os.environ['MASTER_PORT'] = '12357'
-    os.environ['MASTER_PORT'] = '12358'
+    # os.environ['MASTER_PORT'] = '12358'
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -122,11 +122,9 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
 
     if load:
         if overfitted:
-            decoder_handler.load(early_stopped=False,
-                                 recurrent=not train)
+            decoder_handler.load(early_stopped=False, recurrent=not train)
         else:
-            decoder_handler.load(early_stopped=True,
-                                 recurrent=not train)
+            decoder_handler.load(early_stopped=True, recurrent=not train)
 
     if train:
         decoder_handler.train_model(
@@ -143,11 +141,23 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
      _) = dataloader_generator.dataloaders(batch_size=1,
                                            num_workers=num_workers,
                                            shuffle_val=True)
-    x = next(generator_val)['x']
-    scores = decoder_handler.inpaint(x=x,
-                                                   temperature=1.,
-                                                   top_p=0.95,
-                                                   top_k=0)
+    original_x = next(generator_val)['x']
+    x, metadata_dict = data_processor.preprocess(original_x)
+    x_inpainted, generated_region, done = decoder_handler.inpaint(
+        x=x, metadata_dict=metadata_dict, temperature=1., top_p=0.9, top_k=0)
+
+    # Saving
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+    if not os.path.exists(f'{decoder_handler.model_dir}/generations'):
+        os.mkdir(f'{decoder_handler.model_dir}/generations')
+    for k, tensor_score in enumerate(x_inpainted):
+        path_no_extension = f'{decoder_handler.model_dir}/generations/{timestamp}_{k}'
+        decoder_handler.dataloader_generator.write(tensor_score,
+                                                   path_no_extension)
+    for k, tensor_score in enumerate(original_x):
+        path_no_extension = f'{decoder_handler.model_dir}/generations/{timestamp}_{k}_original'
+        decoder_handler.dataloader_generator.write(tensor_score,
+                                                   path_no_extension)
 
 
 if __name__ == '__main__':

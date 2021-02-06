@@ -561,14 +561,14 @@ class DecoderPrefixHandler(Handler):
         else:
             done = True            
         
-        # original_and_reconstruction = self.data_processor.postprocess(
-        #     x.cpu(),
-        #     decoding_end,
-        #     metadata_dict
-        #     )
+        x_inpainted = self.data_processor.postprocess(
+            x.cpu(),
+            decoding_end,
+            metadata_dict
+            )
         
         generated_region = x[:, decoding_start_event:decoding_end]
-        return generated_region, done
+        return x_inpainted, generated_region, done
         
         
         

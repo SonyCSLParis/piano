@@ -182,7 +182,7 @@ def invocations():
 
     global handler
 
-    generated_region, done = handler.inpaint(
+    x_inpainted, generated_region, done = handler.inpaint(
         x=x,
         metadata_dict=metadata_dict,
         num_max_generated_events=None,  # TODO change
