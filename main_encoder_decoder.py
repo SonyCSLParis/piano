@@ -73,7 +73,10 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
     # os.environ['MASTER_PORT'] = '12356'
-    os.environ['MASTER_PORT'] = '12357'
+    # os.environ['MASTER_PORT'] = '12357'
+    os.environ['MASTER_PORT'] = '12358'
+    # os.environ['MASTER_PORT'] = '12359'
+    
     dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
     torch.cuda.set_device(rank)
     device = f'cuda:{rank}'
@@ -125,9 +128,12 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
 
     if load:
         if overfitted:
-            handler.load(early_stopped=False)
+            handler.load(early_stopped=False,
+                         recurrent=not train
+                         )
         else:
-            handler.load(early_stopped=True)
+            handler.load(early_stopped=True, 
+                         recurrent=not train)
 
     if train:
         handler.train_model(
@@ -140,12 +146,6 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         )
         exit()
 
-    # scores = decoder.generate_non_recurrent(
-    #     temperature=1.,
-    #     batch_size=3,
-    #     top_p=0.9,
-    #     top_k=0)
-
     (generator_train, generator_val,
      _) = dataloader_generator.dataloaders(batch_size=1,
                                            num_workers=num_workers,
@@ -156,7 +156,7 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     
     masked_positions = torch.zeros_like(x)
     # inpainting    # But no longer needed!
-    masked_positions[:, 100:200] = 1
+    masked_positions[:, 100:150] = 1
     
     # masked_positions[1:, 600:700] = 1
     # masked_positions[1:, 1000:]
@@ -178,7 +178,6 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
         top_p=0.95
     )
 
-
     # scores = handler.inpaint(x=x,
     #                          masked_positions=masked_positions,
     #                          temperature=1.,
@@ -187,9 +186,6 @@ def main(rank, train, load, overfitted, config, num_workers, world_size,
     # midi_file = 'inputs/br_rhap_format0.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/BENABD02.mid')
     # midi_file='/home/gaetan/Data/databases/Piano/ecomp_piano_dataset/Denisova04.MID')
-
-    # for score in scores:
-    #     score.show()
 
     # scores = decoder.generate_reharmonisation(
     #     temperature=1.0,
