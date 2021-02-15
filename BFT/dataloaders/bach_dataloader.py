@@ -29,6 +29,20 @@ class BachDataloaderGenerator(DataloaderGenerator):
             **chorale_dataset_kwargs
         )
         super(BachDataloaderGenerator, self).__init__(dataset=dataset)
+        # self.features = ['Soprano', 'Alto', 'Tenor', 'Bass']
+        self.features = list(range(4))
+    
+    # Warning different meanings for sequence size:
+    # in ChoraleBeatsDataset it's the number of beats,
+    # here it's the number of events (i.e. in sixteenth notes)
+    @property
+    def sequences_size(self):
+        return self.dataset.sequences_size * self.dataset.subdivision
+    
+    @property
+    def num_channels(self):
+        return 4
+
 
     def dataloaders(self, batch_size, num_workers=0, shuffle_train=True,
                     shuffle_val=False):
