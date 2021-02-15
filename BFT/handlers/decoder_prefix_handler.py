@@ -56,10 +56,10 @@ class DecoderPrefixHandler(Handler):
                     new_key = k.replace('transformer.transformer', 'transformer.transformer_with_states')
                     transformer_with_states_dict[new_key] = v
             state_dict.update(transformer_with_states_dict)
-
         self.model.load_state_dict(
             state_dict=state_dict
             )
+        
 
     # ==== Training methods
     def epoch(
@@ -458,22 +458,30 @@ class DecoderPrefixHandler(Handler):
 
         
         with torch.no_grad():
-            def extract_state_from_parallel_state(state_parallel, i):
-                extracted_state = []
-                for state in state_parallel:
-                    # iterate on layers
-                    # extract -ith element on S and Z
-                    self_atn_x = [state[0][:, i], state[1][:, i]]
-                    extracted_state.append(self_atn_x)
-                return extracted_state
+            # def extract_state_from_parallel_state(state_parallel, i):
+            #     extracted_state = []
+            #     for state in state_parallel:
+            #         # iterate on layers
+            #         # extract -ith element on S and Z
+            #         self_atn_x = [state[0][:, i], state[1][:, i]]
+            #         extracted_state.append(self_atn_x)
+            #     return extracted_state
                         
-            # init:
-            # compute state 
-            _, _, state_parallel = self.forward_with_states(target=x, metadata_dict=metadata_dict)
-            state = extract_state_from_parallel_state(
-                state_parallel=state_parallel,
-                i=decoding_start_event * self.num_channels_target - 1
-            )
+            # # init:
+            # # compute state 
+            # _, _, state_parallel = self.forward_with_states(target=x, metadata_dict=metadata_dict)
+            # state = extract_state_from_parallel_state(
+            #     state_parallel=state_parallel,
+            #     i=decoding_start_event * self.num_channels_target - 1
+            # )
+            
+            # compute_state slices using :state_index AFTER adding the dummy symbol before x
+            # state index is thus the state which is used to predict the x token located at state_index
+            state = self.model.module.compute_state(target=x,
+                                       metadata_dict=metadata_dict,
+                                       state_index=decoding_start_event * self.num_channels_target - 1
+                                       )
+            
             xi = x[:, decoding_start_event - 1, self.num_channels_target - 1]
             target_embedded = self.model.module.data_processor.embed(
                     x)
