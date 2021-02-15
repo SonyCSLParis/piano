@@ -121,9 +121,11 @@ def main(rank, overfitted, config, num_workers, world_size, model_dir):
                                     dataloader_generator=dataloader_generator)
     # Load model
     if overfitted:
-        handler.load(early_stopped=False)
+        handler.load(early_stopped=False,
+                     recurrent=True)
     else:
-        handler.load(early_stopped=True)
+        handler.load(early_stopped=True,
+                     recurrent=True)
 
     local_only = False
     if local_only:
@@ -570,7 +572,7 @@ def tensor_to_ableton(tensor, clip_start, start_event, end_event,
             notes_region.append(note)
         if i >= end_event:
             notes_after_region.append(note)
-
+    # TODO probably wrong but never used
     track_duration = time[-1].item() + notes[-1]['duration'].item()
     return notes, notes_region, notes_after_region, track_duration
 
