@@ -236,6 +236,41 @@ class CausalEncoder(nn.Module):
             for t, pre_softmax in zip(output.split(1, 2), self.pre_softmaxes)
         ]
         return weights_per_category, h_pe, states
+    
+    def compute_state(self, target,
+                      metadata_dict,
+                      state_index,
+                      h_pe_init=None):
+        """
+        :param target: sequence of tokens (batch_size, num_events, num_channels)
+        :return:
+        """
+        batch_size, num_events, num_channels = target.size()
+        
+        target_embedded = self.data_processor.embed(target)
+        target_seq = flatten(target_embedded)
+        
+        # add positional embeddings
+        target_seq, h_pe = self.positional_embedding(target_seq, i=0, h=h_pe_init, metadata_dict=metadata_dict)
+        target_seq = self.linear_target(target_seq)
+
+
+        # shift target_seq by one
+        # Pad
+        dummy_input_target = self.sos_embedding(metadata_dict).unsqueeze(1)
+        target_seq = torch.cat(
+            [
+                dummy_input_target,
+                target_seq
+            ],
+            dim=1)
+        target_seq = target_seq[:, :state_index]
+
+        output, states = self.transformer.forward_with_states(
+            target_seq
+        )
+
+        return states
 
 
 
