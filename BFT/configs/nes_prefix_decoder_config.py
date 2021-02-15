@@ -54,14 +54,14 @@ config = {
     'decoder_kwargs':              dict(
         d_model=512,
         n_head=8,
-        num_decoder_layers=8,
+        num_decoder_layers=16,
         dim_feedforward=1024,
         dropout=0.1,
         label_smoothing=False
     ),
     # ======== Training ========
     'lr':                          1e-4,
-    'batch_size':                  4,
+    'batch_size':                  2,
     'num_batches':                 256,
     'num_epochs':                  2000,
 
