@@ -187,7 +187,7 @@ def invocations():
         metadata_dict=metadata_dict,
         num_max_generated_events=None,  # TODO change
         temperature=1.,
-        top_p=0.95,
+        top_p=0.98,
         top_k=0)
 
     new_x = torch.cat([
@@ -199,14 +199,16 @@ def invocations():
     # TODO use done to rescale
 
     ableton_notes, track_duration = tensor_to_ableton(
-        new_x, start_time=clip_start, beats_per_second=beats_per_second,
-        rescale=False
-        )
+        new_x,
+        start_time=clip_start,
+        beats_per_second=beats_per_second,
+        rescale=False)
 
     ableton_notes_region, _ = tensor_to_ableton(
         generated_region[0].detach().cpu(),
         start_time=selected_region['start'],
-        expected_duration=(selected_region['end'] - selected_region['start']) * seconds_per_beat,
+        expected_duration=(selected_region['end'] - selected_region['start']) *
+        seconds_per_beat,
         beats_per_second=beats_per_second,
         rescale=done)
 
@@ -463,8 +465,9 @@ def ableton_to_tensor(ableton_note_list,
         placeholder_duration=placeholder_duration, batch_size=1)
 
     if event_start > 0:
-        last_time_shift_before = start_time * seconds_per_beat - d['time'][event_start - 1].item()
-        
+        last_time_shift_before = start_time * seconds_per_beat - d['time'][
+            event_start - 1].item()
+
     # delete unnecessary entries in dict
     del d['time']
     before = {k: v[:event_start] for k, v in d.items()}
@@ -480,7 +483,7 @@ def ableton_to_tensor(ableton_note_list,
             sequence=before,
             start_time=event_start - data_processor.num_events_before,
             sequence_size=data_processor.num_events_before)
-        
+
         if event_start > 0:
             before['time_shift'][-1] = last_time_shift_before
 
@@ -515,8 +518,7 @@ def ableton_to_tensor(ableton_note_list,
     after = handler.dataloader_generator.dataset.add_start_end_symbols(
         sequence=after,
         start_time=0,
-        sequence_size=max(num_notes_after, data_processor.num_events_after)
-        )
+        sequence_size=max(num_notes_after, data_processor.num_events_after))
 
     after = handler.dataloader_generator.dataset.tokenize(after)
     after = {k: torch.LongTensor(t) for k, t in after.items()}
@@ -572,7 +574,8 @@ def ableton_to_tensor(ableton_note_list,
     return x, metadata_dict, unused_before, before, after, unused_after, clip_start, selected_region
 
 
-def tensor_to_ableton(tensor, start_time,
+def tensor_to_ableton(tensor,
+                      start_time,
                       beats_per_second,
                       expected_duration=None,
                       rescale=False):
@@ -597,26 +600,27 @@ def tensor_to_ableton(tensor, start_time,
     timeshifts = torch.FloatTensor(
         [index2value['time_shift'][ts.item()] for ts in tensor[:, 3]])
     time = torch.cumsum(timeshifts, dim=0)
-    
+
     if rescale:
         actual_duration = time[-1].item()
         rescaling_factor = expected_duration / actual_duration
     else:
         rescaling_factor = 1
-    
+
     time = (torch.cat([torch.zeros(
-        (1, )), time[:-1]], dim=0) * rescaling_factor
-            * beats_per_second + start_time)
+        (1, )), time[:-1]], dim=0) * rescaling_factor * beats_per_second +
+            start_time)
     for i in range(num_events):
         note = dict(pitch=index2value['pitch'][tensor[i, 0].item()],
                     time=time[i].item(),
                     duration=index2value['duration'][tensor[i, 2].item()] *
-                    beats_per_second,
+                    beats_per_second * rescaling_factor,
                     velocity=index2value['velocity'][tensor[i, 1].item()],
                     muted=0)
         notes.append(note)
 
-    track_duration = time[-1].item() + notes[-1]['duration'].item()
+    track_duration = time[-1].item() + (notes[-1]['duration'].item() *
+                                        rescaling_factor * beats_per_second)
     return notes, track_duration
 
 
