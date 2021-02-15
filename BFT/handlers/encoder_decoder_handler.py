@@ -55,7 +55,7 @@ class EncoderDecoderHandler(Handler):
     def num_channels_target(self):
         return self.model.module.data_processor.num_channels_target
 
-    def load(self, early_stopped):
+    def load(self, early_stopped, recurrent):
         map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
         print(f'Loading models {self.__repr__()}')
         if early_stopped:
@@ -68,16 +68,15 @@ class EncoderDecoderHandler(Handler):
         state_dict = torch.load(f'{model_dir}/model',
                                 map_location=map_location)
 
-        # TODO, handle this properly
         # copy transformer_with_states during inference
-
-        transformer_with_states_dict = {}
-        for k, v in state_dict.items():
-            if 'transformer' in k:
-                new_key = k.replace('decoder.transformer',
-                                    'decoder.transformer_with_states')
-                transformer_with_states_dict[new_key] = v
-        state_dict.update(transformer_with_states_dict)
+        if recurrent:
+            transformer_with_states_dict = {}
+            for k, v in state_dict.items():
+                if 'transformer' in k:
+                    new_key = k.replace('decoder.transformer',
+                                        'decoder.transformer_with_states')
+                    transformer_with_states_dict[new_key] = v
+            state_dict.update(transformer_with_states_dict)
 
         self.model.load_state_dict(state_dict=state_dict)
 
@@ -460,10 +459,13 @@ class EncoderDecoderHandler(Handler):
                     metadata_dict=metadata_dict_sliced)
 
             batch_size, num_events_target, num_channels_source = x.size()
+            # print('WARNING: no excluded symbols')
+            print('Warning: excluded symbols ON')
             # i corresponds to the position of the token BEING generated
             for event_index in range(start_event, end_event):
                 for channel_index in range(self.num_channels_target):
                     i = event_index * self.num_channels_target + channel_index
+                    # TODO skip computation if token is not masked
 
                     forward_pass = self.forward_step(
                         memory=memory,
@@ -751,9 +753,8 @@ class EncoderDecoderHandler(Handler):
             weights, _, state_parallel = self.forward_with_states(
                 memory=memory, target=x, metadata_dict=metadata_dict)
 
-            # TODO which one?!
+            # For inpainting between 100 and 200
             state = extract_state_from_parallel_state(state_parallel, 399)
-            # state = extract_state_from_parallel_state(state_parallel, 400)
             xi = x[:, 99, 3]
 
             # compute h_pe
@@ -773,7 +774,7 @@ class EncoderDecoderHandler(Handler):
             # index 400 being computed twice?!
 
             # i corresponds to the position of the token BEING generated
-            for event_index in range(100, 200):
+            for event_index in range(100, 150):
                 for channel_index in range(self.num_channels_target):
                     i = event_index * self.num_channels_target + channel_index
 
@@ -790,12 +791,12 @@ class EncoderDecoderHandler(Handler):
                     
                     # TODO put this in a method so that it is applicable to all datasets
                     # exclude non note symbols:
-                    exclude_symbols = ['START', 'END', 'XX']
-                    for sym in exclude_symbols:
-                        sym_index = self.dataloader_generator.dataset.value2index[
-                            self.dataloader_generator.
-                            features[channel_index]][sym]
-                        logits[:, sym_index] = -np.inf
+                    # exclude_symbols = ['START', 'END', 'XX']
+                    # for sym in exclude_symbols:
+                    #     sym_index = self.dataloader_generator.dataset.value2index[
+                    #         self.dataloader_generator.
+                    #         features[channel_index]][sym]
+                    #     logits[:, sym_index] = -np.inf
 
                     filtered_logits = []
                     for logit in logits:
@@ -837,7 +838,6 @@ class EncoderDecoderHandler(Handler):
         scores = []
         for k, tensor_score in enumerate(original_and_reconstruction):
             path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}'
-            # TODO fix write signature
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
