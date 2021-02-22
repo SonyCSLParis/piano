@@ -160,7 +160,12 @@ def invocations():
 
     notes = d['notes']
     selected_region = d['selected_region']
-    clip_start = d['clip_start']
+    
+    # if there is NO note in the clip
+    if 'clip_start' not in d:
+        clip_start = d['selected_region']['start']
+    else:
+        clip_start = d['clip_start']
     tempo = d['tempo']
     beats_per_second = tempo / 60
     seconds_per_beat = 1 / beats_per_second
@@ -170,7 +175,7 @@ def invocations():
         num_max_generated_events = 15
         note_density = d['note_density'] 
         (x, (event_start, event_end), num_events_before_padding,
-         clip_start) = ableton_to_tensor(notes, note_density, clip_start,
+         clip_start, selected_region) = ableton_to_tensor(notes, note_density, clip_start,
                                          seconds_per_beat, selected_region)
     elif case == 'continue':
         num_max_generated_events = 30
@@ -456,8 +461,17 @@ def ableton_to_tensor(ableton_note_list,
     # Remove selected region and replace with the correct number of events
     # recompute event_start and event_end
     num_events_to_compose = int((end_time - start_time) * note_density)
-    # TODO restrict to a maximum number of events to recompose
-    assert num_events_to_compose < 256
+    
+    # We only generate up to 256 tokens
+    # If more, we simply consider that we compose 256 tokens
+    if num_events_to_compose > 256:
+        num_events_to_compose = 256
+        event_end = event_start + num_events_to_compose
+        end_time = start_time + num_events_to_compose / note_density
+        # we need to update selected_region as well
+        selected_region['end'] = end_time
+        
+    
     for k in d:
         d[k] = torch.cat([
             d[k][:event_start],
@@ -533,7 +547,7 @@ def ableton_to_tensor(ableton_note_list,
     x = torch.stack(
         [sequence_dict[e] for e in handler.dataloader_generator.features],
         dim=-1).long()
-    return x, (event_start, event_end), num_events_before_padding, clip_start
+    return x, (event_start, event_end), num_events_before_padding, clip_start, selected_region
 
 
 def tensor_to_ableton(tensor, clip_start, start_event, end_event,
