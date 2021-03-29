@@ -502,10 +502,10 @@ class EncoderDecoderHandler(Handler):
                         new_pitch_index = np.random.choice(np.arange(
                             self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
-                        
                         # TODO regenerate or not depending on masked_positions?
-                        x[batch_index, event_index,
-                          channel_index] = int(new_pitch_index)
+                        if masked_positions[batch_index, event_index, channel_index] == 1:
+                            x[batch_index, event_index,
+                            channel_index] = int(new_pitch_index)
 
                     # update
                     xi = x[:, event_index, channel_index]
