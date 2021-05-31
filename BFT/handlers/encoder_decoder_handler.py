@@ -219,7 +219,7 @@ class EncoderDecoderHandler(Handler):
                                 channel_index].item() == 0:
                             x[batch_index, event_index,
                               channel_index] = source[batch_index, event_index,
-                              channel_index]
+                                                      channel_index]
                         else:
                             x[batch_index, event_index,
                               channel_index] = int(new_pitch_index)
@@ -323,8 +323,16 @@ class EncoderDecoderHandler(Handler):
                         new_pitch_index = np.random.choice(np.arange(
                             self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
-                        x[batch_index, event_index - start_event,
-                          channel_index] = int(new_pitch_index)
+                        # TODO regenerate only masked positions
+                        if metadata_dict['masked_positions'][
+                                batch_index, event_index,
+                                channel_index].item() == 1:
+                            x[batch_index, event_index - start_event,
+                              channel_index] = int(new_pitch_index)
+                        else:
+                            x[batch_index, event_index -start_event,
+                              channel_index] = source[batch_index, event_index,
+                                                      channel_index]
 
                     # update
                     xi = x[:, event_index - start_event, channel_index]
@@ -503,9 +511,10 @@ class EncoderDecoderHandler(Handler):
                             self.num_tokens_per_channel_target[channel_index]),
                                                            p=p[batch_index])
                         # TODO regenerate or not depending on masked_positions?
-                        if masked_positions[batch_index, event_index, channel_index] == 1:
+                        if masked_positions[batch_index, event_index,
+                                            channel_index] == 1:
                             x[batch_index, event_index,
-                            channel_index] = int(new_pitch_index)
+                              channel_index] = int(new_pitch_index)
 
                     # update
                     xi = x[:, event_index, channel_index]
@@ -769,7 +778,7 @@ class EncoderDecoderHandler(Handler):
             }
             _, h_pe = self.model.module.positional_embedding_target(
                 target_seq, i=0, h=h_pe, metadata_dict=metadata_dict_sliced)
-            
+
             # TODO PROBLEM HERE
             # index 400 being computed twice?!
 
@@ -788,7 +797,7 @@ class EncoderDecoderHandler(Handler):
                     weights = forward_pass['weights']
 
                     logits = weights / temperature
-                    
+
                     # TODO put this in a method so that it is applicable to all datasets
                     # exclude non note symbols:
                     # exclude_symbols = ['START', 'END', 'XX']

@@ -27,14 +27,14 @@ class DecoderPrefixHandler(Handler):
                 self.writer.add_scalar(f'{k}/train', v, epoch_id)
             for k, v in monitored_quantities_val.items():
                 self.writer.add_scalar(f'{k}/val', v, epoch_id)
-                
+
     def forward_with_states(self,
                             target,
                             metadata_dict,
                             h_pe_init=None):
         return self.model.module.forward_with_states(
             target, metadata_dict=metadata_dict, h_pe_init=h_pe_init)
-                
+
     def load(self, early_stopped, recurrent):
         map_location = {'cuda:0': f'cuda:{dist.get_rank()}'}
         print(f'Loading models {self.__repr__()}')
@@ -44,10 +44,10 @@ class DecoderPrefixHandler(Handler):
         else:
             print('Load over-fitted model')
             model_dir = f'{self.model_dir}/overfitted'
-            
+
         state_dict = torch.load(f'{model_dir}/model',
                                 map_location=map_location)
-        
+
         # if recurrent, we must also load the "with_states" version
         if recurrent:
             transformer_with_states_dict = {}
@@ -59,7 +59,7 @@ class DecoderPrefixHandler(Handler):
         self.model.load_state_dict(
             state_dict=state_dict
             )
-        
+
 
     # ==== Training methods
     def epoch(
@@ -135,7 +135,7 @@ class DecoderPrefixHandler(Handler):
         assert self.recurrent
         self.eval()
         batch_size, num_events, _ = x.size()
-        
+
         # TODO only works with batch_size=1 at present
         assert x.size(0) == 1
 
@@ -180,12 +180,12 @@ class DecoderPrefixHandler(Handler):
                                                             p=p[batch_index])
                             x[batch_index, event_index,
                             channel_index] = int(new_pitch_index)
-                            
+
                             end_symbol_index = self.dataloader_generator.dataset.value2index[
                             self.dataloader_generator.features[channel_index]]['END']
                             if end_symbol_index == int(new_pitch_index):
                                 decoding_end = event_index
-                    
+
 
                     # update
                     xi = x[:, event_index, channel_index]
@@ -194,7 +194,7 @@ class DecoderPrefixHandler(Handler):
 
                 if decoding_end is not None:
                     break
-        
+
         print(f'Num events_generated: {decoding_end - decoding_start_event}')
         # to score
         original_and_reconstruction = self.data_processor.postprocess(
@@ -202,7 +202,7 @@ class DecoderPrefixHandler(Handler):
             decoding_end,
             metadata_dict
             )
-        
+
         # find decoding end for original sequence
         end_symbol_index = self.dataloader_generator.dataset.value2index[
                             self.dataloader_generator.features[0]]['END']
@@ -210,7 +210,7 @@ class DecoderPrefixHandler(Handler):
             if original_x[0, i, 0].item() == end_symbol_index:
                 decoding_end = i
                 break
-            
+
         original_x = self.data_processor.postprocess(
             original_x.cpu(),
             decoding_end,
@@ -231,7 +231,7 @@ class DecoderPrefixHandler(Handler):
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
-            
+
 
         for k, tensor_score in enumerate(original_x):
             path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}_original'
@@ -239,7 +239,7 @@ class DecoderPrefixHandler(Handler):
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
-            
+
         for k, tensor_score in enumerate(true_x):
             path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}_true'
             # TODO fix write signature
@@ -250,7 +250,7 @@ class DecoderPrefixHandler(Handler):
         ###############################
 
         return scores
-        
+
     def test_inpaint(self, x, temperature=1., top_p=1., top_k=0):
         # TODO add arguments to preprocess
         true_x = x.clone()
@@ -260,7 +260,7 @@ class DecoderPrefixHandler(Handler):
         assert self.recurrent
         self.eval()
         batch_size, num_events, _ = x.size()
-        
+
         # TODO only works with batch_size=1 at present
         assert x.size(0) == 1
 
@@ -275,9 +275,9 @@ class DecoderPrefixHandler(Handler):
                     self_atn_x = [state[0][:, i], state[1][:, i]]
                     extracted_state.append(self_atn_x)
                 return extracted_state
-                        
+
             # init:
-            # compute state 
+            # compute state
             _, _, state_parallel = self.forward_with_states(target=x, metadata_dict=metadata_dict)
             state = extract_state_from_parallel_state(
                 state_parallel=state_parallel,
@@ -288,21 +288,21 @@ class DecoderPrefixHandler(Handler):
                     x)
 
             # compute positional embeddings, i.e. h_pe
-            # TODO -1 HERE ?! 
+            # TODO -1 HERE ?!
             # TODO COMPUTE EXACTLY! NEEDS TO PERFORM FORWARD_STEPS
             target_seq = flatten(
                 target_embedded)[:, :self.num_channels_target *
                                     (decoding_start_event - 1)]
-                
+
             metadata_dict_sliced = metadata_dict.copy()
             # AND -1 HERE!
-            metadata_dict_sliced['original_sequence'] = metadata_dict['original_sequence'][:, :decoding_start_event - 1] 
+            metadata_dict_sliced['original_sequence'] = metadata_dict['original_sequence'][:, :decoding_start_event - 1]
             _, h_pe = self.model.module.positional_embedding(
                 target_seq,
                 i=0,
                 h=None,
                 metadata_dict=metadata_dict_sliced)
-            
+
             for channel_index in range(self.num_channels_target - 1):
                 original_token = x[:, decoding_start_event - 1, channel_index]
                 original_token_embedded = self.model.module.data_processor.embed_step(original_token, channel_index)
@@ -312,7 +312,7 @@ class DecoderPrefixHandler(Handler):
                     i=(decoding_start_event -1) * self.num_channels_target + channel_index,
                     h=h_pe,
                     metadata_dict=metadata_dict
-                )            
+                )
 
             # i corresponds to the position of the token BEING generated
             for event_index in range(decoding_start_event, num_events):
@@ -348,12 +348,12 @@ class DecoderPrefixHandler(Handler):
                                                             p=p[batch_index])
                             x[batch_index, event_index,
                             channel_index] = int(new_pitch_index)
-                            
+
                             end_symbol_index = self.dataloader_generator.dataset.value2index[
                             self.dataloader_generator.features[channel_index]]['END']
                             if end_symbol_index == int(new_pitch_index):
                                 decoding_end = event_index
-                    
+
 
                     # update
                     xi = x[:, event_index, channel_index]
@@ -362,7 +362,7 @@ class DecoderPrefixHandler(Handler):
 
                 if decoding_end is not None:
                     break
-        
+
         print(f'Num events_generated: {decoding_end - decoding_start_event}')
         # to score
         original_and_reconstruction = self.data_processor.postprocess(
@@ -370,7 +370,7 @@ class DecoderPrefixHandler(Handler):
             decoding_end,
             metadata_dict
             )
-        
+
         # find decoding end for original sequence
         end_symbol_index = self.dataloader_generator.dataset.value2index[
                             self.dataloader_generator.features[0]]['END']
@@ -378,7 +378,7 @@ class DecoderPrefixHandler(Handler):
             if original_x[0, i, 0].item() == end_symbol_index:
                 decoding_end = i
                 break
-            
+
         original_x = self.data_processor.postprocess(
             original_x.cpu(),
             decoding_end,
@@ -399,7 +399,7 @@ class DecoderPrefixHandler(Handler):
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
-            
+
 
         for k, tensor_score in enumerate(original_x):
             path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}_original'
@@ -407,7 +407,7 @@ class DecoderPrefixHandler(Handler):
             scores.append(
                 self.dataloader_generator.write(tensor_score,
                                                 path_no_extension))
-            
+
         for k, tensor_score in enumerate(true_x):
             path_no_extension = f'{self.model_dir}/generations/{timestamp}_{k}_true'
             # TODO fix write signature
@@ -418,8 +418,8 @@ class DecoderPrefixHandler(Handler):
         ###############################
 
         return scores
-    
-    
+
+
     def inpaint(self, x,
                 metadata_dict,
                 num_max_generated_events=None,
@@ -438,14 +438,14 @@ class DecoderPrefixHandler(Handler):
             [type]: [description]
         """
         # original_x = x.clone()
-        
+
         print(f'Placeholder duration: {metadata_dict["placeholder_duration"]}')
-        
+
         assert self.recurrent
         self.eval()
         batch_size, num_events, _ = x.size()
-            
-        
+
+
         # TODO only works with batch_size=1 at present
         assert x.size(0) == 1
 
@@ -456,7 +456,7 @@ class DecoderPrefixHandler(Handler):
         else:
             decoding_end_event = decoding_start_event + num_max_generated_events
 
-        
+
         with torch.no_grad():
             # def extract_state_from_parallel_state(state_parallel, i):
             #     extracted_state = []
@@ -466,42 +466,42 @@ class DecoderPrefixHandler(Handler):
             #         self_atn_x = [state[0][:, i], state[1][:, i]]
             #         extracted_state.append(self_atn_x)
             #     return extracted_state
-                        
+
             # # init:
-            # # compute state 
+            # # compute state
             # _, _, state_parallel = self.forward_with_states(target=x, metadata_dict=metadata_dict)
             # state = extract_state_from_parallel_state(
             #     state_parallel=state_parallel,
             #     i=decoding_start_event * self.num_channels_target - 1
             # )
-            
+
             # compute_state slices using :state_index AFTER adding the dummy symbol before x
             # state index is thus the state which is used to predict the x token located at state_index
             state = self.model.module.compute_state(target=x,
                                        metadata_dict=metadata_dict,
                                        state_index=decoding_start_event * self.num_channels_target - 1
                                        )
-            
+
             xi = x[:, decoding_start_event - 1, self.num_channels_target - 1]
             target_embedded = self.model.module.data_processor.embed(
                     x)
 
             # compute positional embeddings, i.e. h_pe
-            # TODO -1 HERE ?! 
+            # TODO -1 HERE ?!
             # TODO COMPUTE EXACTLY! NEEDS TO PERFORM FORWARD_STEPS
             target_seq = flatten(
                 target_embedded)[:, :self.num_channels_target *
                                     (decoding_start_event - 1)]
-                
+
             metadata_dict_sliced = metadata_dict.copy()
             # AND -1 HERE!
-            metadata_dict_sliced['original_sequence'] = metadata_dict['original_sequence'][:, :decoding_start_event - 1] 
+            metadata_dict_sliced['original_sequence'] = metadata_dict['original_sequence'][:, :decoding_start_event - 1]
             _, h_pe = self.model.module.positional_embedding(
                 target_seq,
                 i=0,
                 h=None,
                 metadata_dict=metadata_dict_sliced)
-            
+
             for channel_index in range(self.num_channels_target - 1):
                 original_token = x[:, decoding_start_event - 1, channel_index]
                 original_token_embedded = self.model.module.data_processor.embed_step(original_token, channel_index)
@@ -511,7 +511,7 @@ class DecoderPrefixHandler(Handler):
                     i=(decoding_start_event -1) * self.num_channels_target + channel_index,
                     h=h_pe,
                     metadata_dict=metadata_dict
-                )            
+                )
 
             # i corresponds to the position of the token BEING generated
             for event_index in range(decoding_start_event, decoding_end_event):
@@ -547,12 +547,12 @@ class DecoderPrefixHandler(Handler):
                                                             p=p[batch_index])
                             x[batch_index, event_index,
                             channel_index] = int(new_pitch_index)
-                            
+
                             end_symbol_index = self.dataloader_generator.dataset.value2index[
                             self.dataloader_generator.features[channel_index]]['END']
                             if end_symbol_index == int(new_pitch_index):
                                 decoding_end = event_index
-                    
+
 
                     # update
                     xi = x[:, event_index, channel_index]
@@ -561,25 +561,25 @@ class DecoderPrefixHandler(Handler):
 
                 if decoding_end is not None:
                     break
-        
-        
+
+
         if decoding_end is None:
             done = False
             decoding_end = decoding_end_event
         else:
-            done = True            
-        
+            done = True
+
         x_inpainted = self.data_processor.postprocess(
             x.cpu(),
             decoding_end,
             metadata_dict
             )
-        
+
         generated_region = x[:, decoding_start_event:decoding_end]
         return x_inpainted, generated_region, done
-        
-        
-        
+
+
+
     # ===== Generation methods
     def generate_non_recurrent(self,
                                temperature,
@@ -662,7 +662,7 @@ class DecoderPrefixHandler(Handler):
 
         x = torch.zeros(batch_size, num_events,
                         self.num_channels_target).long()
-        
+
         # needed for sos_embedding
         metadata_dict['original_sequence'] = x
         with torch.no_grad():
